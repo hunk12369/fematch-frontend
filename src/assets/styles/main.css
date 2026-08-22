@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default Telegram theme variables (fallback if not loaded or outside TG) */
+  --tg-theme-bg-color: #ffffff;
+  --tg-theme-secondary-bg-color: #fdf2f8;
+  --tg-theme-text-color: #1e1e24;
+  --tg-theme-hint-color: #9ca3af;
+  --tg-theme-link-color: #ec4899;
+  --tg-theme-button-color: #ec4899;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-header-bg-color: #ffffff;
+  --tg-theme-section-bg-color: #ffffff;
+  --tg-theme-section-header-text-color: #6b7280;
+  --tg-theme-subtitle-text-color: #9ca3af;
+  --tg-theme-destructive-text-color: #ef4444;
+  
+  /* Safe area insets fallbacks */
+  --tg-safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --tg-safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --tg-safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --tg-safe-area-inset-right: env(safe-area-inset-right, 0px);
+  
+  --tg-content-safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --tg-content-safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.dark {
+  --tg-theme-bg-color: #121218;
+  --tg-theme-secondary-bg-color: #1c1a24;
+  --tg-theme-text-color: #f8fafc;
+  --tg-theme-hint-color: #64748b;
+  --tg-theme-link-color: #f472b6;
+  --tg-theme-button-color: #ec4899;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-header-bg-color: #121218;
+  --tg-theme-section-bg-color: #1c1a24;
+  --tg-theme-section-header-text-color: #94a3b8;
+  --tg-theme-subtitle-text-color: #64748b;
+}
+
+/* Base resets for mobile Telegram Mini Apps */
+html, body {
+  touch-action: pan-x pan-y;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Custom scrollbar utility */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .safe-top {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  .safe-bottom {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+  }
+
+  .dark .glass-card {
+    background: rgba(28, 26, 36, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* Animations */
+@keyframes pulse-gentle {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.animate-pulse-gentle {
+  animation: pulse-gentle 2.5s ease-in-out infinite;
+}
+
+@keyframes float-subtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.animate-float {
+  animation: float-subtle 3s ease-in-out infinite;
+}

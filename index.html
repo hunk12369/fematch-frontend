@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="theme-color" content="#fdf2f8" />
+    
+    <title>Fematch - Telegram Mini App</title>
+    
+    <!-- Telegram WebApp Core Script (disponible en window.Telegram.WebApp) -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <!-- Google Fonts: Plus Jakarta Sans / Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="h-full w-full overflow-hidden bg-tg-bg text-tg-text antialiased select-none font-['Plus_Jakarta_Sans',sans-serif]">
+    <div id="app" class="h-full w-full flex flex-col"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
