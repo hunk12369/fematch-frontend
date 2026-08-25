@@ -7,7 +7,8 @@ import axios, {
 import { getTelegramInitData } from '@/telegram/init'
 
 // Base URL configurada desde variables de entorno
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || ''
+const BASE_URL = rawBaseUrl.endsWith('/') ? rawBaseUrl.slice(0, -1) : rawBaseUrl
 
 /**
  * Instancia centralizada de Axios configurada para Telegram Mini Apps
@@ -23,7 +24,9 @@ export const apiClient: AxiosInstance = axios.create({
 
 /**
  * Interceptor de Peticiones:
- * Adjunta automáticamente el encabezado Authorization: tma ${window.Telegram.WebApp.initData}
+ * Adjunta automáticamente las cabeceras:
+ * - Authorization: tma ${window.Telegram.WebApp.initData}
+ * - x-telegram-init-data: ${window.Telegram.WebApp.initData}
  * a todas las llamadas salientes hacia el Backend.
  */
 apiClient.interceptors.request.use(
@@ -32,8 +35,9 @@ apiClient.interceptors.request.use(
     const initData = window.Telegram?.WebApp?.initData || getTelegramInitData()
 
     if (initData) {
-      // Formato estándar Telegram Mini Apps: "tma <initDataRaw>"
+      // Formato estándar Telegram Mini Apps
       config.headers.set('Authorization', `tma ${initData}`)
+      config.headers.set('x-telegram-init-data', initData)
     } else {
       console.warn(
         '⚠️ [Fematch API] Petición enviada sin Authorization (initData no disponible todavía)'

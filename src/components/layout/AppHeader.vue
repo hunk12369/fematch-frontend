@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useTelegramStore } from '@/stores/telegram.store'
+import { usePremiumStore } from '@/stores/premium.store'
 import { useHaptics } from '@/composables/useHaptics'
-import { Sparkles, Moon, Sun, ShieldCheck } from 'lucide-vue-next'
+import { Sparkles, Moon, Sun, Crown } from 'lucide-vue-next'
 
 const tgStore = useTelegramStore()
+const premiumStore = usePremiumStore()
 const haptics = useHaptics()
 
 const isDark = computed(() => tgStore.isDarkMode)
@@ -12,6 +14,10 @@ const isDark = computed(() => tgStore.isDarkMode)
 function onToggleTheme() {
   haptics.selection()
   tgStore.toggleTheme()
+}
+
+function openPremiumShop() {
+  premiumStore.openModal('vip_subscription')
 }
 </script>
 
@@ -35,19 +41,23 @@ function onToggleTheme() {
       </div>
     </div>
 
-    <!-- Right Controls: TG User badge & Theme toggle -->
+    <!-- Right Controls: VIP Store, TG User badge & Theme toggle -->
     <div class="flex items-center gap-2">
-      <!-- Telegram User Badge -->
-      <div
-        v-if="tgStore.user"
-        class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-fematch-pink-50 dark:bg-fematch-violet-950/60 border border-fematch-pink-200 dark:border-fematch-violet-800 text-xs font-medium text-fematch-pink-700 dark:text-fematch-pink-300"
+      <!-- VIP / Stars Tienda Button -->
+      <button
+        type="button"
+        @click="openPremiumShop"
+        class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-400/20 to-amber-500/20 border border-amber-400/50 text-amber-500 font-extrabold text-xs active:scale-95 transition-transform shadow-xs"
+        title="Tienda VIP y Telegram Stars"
       >
-        <ShieldCheck class="w-3.5 h-3.5 text-fematch-cyan-500" />
-        <span class="max-w-[85px] truncate font-semibold">{{ tgStore.user.first_name }}</span>
-      </div>
+        <Crown class="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+        <span v-if="premiumStore.isVip" class="text-[11px] font-black">VIP</span>
+        <span v-else class="text-[11px]">Tienda</span>
+      </button>
 
       <!-- Theme Switcher -->
       <button
+        type="button"
         @click="onToggleTheme"
         class="p-2 rounded-full bg-fematch-violet-50 dark:bg-fematch-violet-900/50 text-fematch-violet-600 dark:text-fematch-violet-300 active:scale-95 transition-transform"
         title="Alternar tema"

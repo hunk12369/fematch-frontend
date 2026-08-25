@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTelegramStore } from '@/stores/telegram.store'
-import { Terminal, CheckCircle2, ChevronDown, ChevronUp, KeyRound } from 'lucide-vue-next'
+import { useUserStore } from '@/stores/user.store'
+import { Terminal, CheckCircle2, ChevronDown, ChevronUp, KeyRound, Sparkles } from 'lucide-vue-next'
 
+const router = useRouter()
 const tgStore = useTelegramStore()
+const userStore = useUserStore()
 const isExpanded = ref(false)
+
+function testOnboarding() {
+  userStore.resetOnboardingForTesting()
+  router.push('/onboarding')
+}
 </script>
 
 <template>
@@ -27,14 +36,26 @@ const isExpanded = ref(false)
         </span>
       </div>
 
-      <button
-        @click="isExpanded = !isExpanded"
-        class="text-slate-400 hover:text-white p-1"
-        title="Detalles de autenticación TMA"
-      >
-        <ChevronDown v-if="!isExpanded" class="w-3.5 h-3.5" />
-        <ChevronUp v-else class="w-3.5 h-3.5" />
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          @click="testOnboarding"
+          class="px-2 py-0.5 rounded bg-fematch-pink-500/20 border border-fematch-pink-400/40 text-fematch-pink-300 hover:bg-fematch-pink-500/30 text-[10px] font-bold flex items-center gap-1"
+          title="Probar flujo de Onboarding"
+        >
+          <Sparkles class="w-2.5 h-2.5" />
+          <span>Test Onboarding</span>
+        </button>
+
+        <button
+          @click="isExpanded = !isExpanded"
+          class="text-slate-400 hover:text-white p-1"
+          title="Detalles de autenticación TMA"
+        >
+          <ChevronDown v-if="!isExpanded" class="w-3.5 h-3.5" />
+          <ChevronUp v-else class="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
 
     <!-- Collapsible Details -->

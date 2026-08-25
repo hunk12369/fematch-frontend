@@ -9,15 +9,28 @@ export const useMatchesStore = defineStore('matches', () => {
   const candidates = ref<MatchCandidate[]>([])
   const matches = ref<any[]>([])
   const currentIndex = ref(0)
+  const currentPage = ref(1)
   const isLoading = ref(false)
   const lastMatch = ref<MatchCandidate | null>(null)
   const isMatchModalOpen = ref(false)
 
-  async function loadDiscoveryFeed() {
+  async function loadDiscoveryFeed(reset = false) {
+    if (reset) {
+      currentPage.value = 1
+      candidates.value = []
+      currentIndex.value = 0
+    }
     isLoading.value = true
     try {
-      candidates.value = await matchService.getDiscoveryFeed()
-      currentIndex.value = 0
+      const newProfiles = await matchService.getDiscoveryFeed(currentPage.value, 20)
+      if (reset || candidates.value.length === 0) {
+        candidates.value = newProfiles
+        currentIndex.value = 0
+      } else {
+        const existingIds = new Set(candidates.value.map((c) => c.id))
+        const unique = newProfiles.filter((c) => !existingIds.has(c.id))
+        candidates.value.push(...unique)
+      }
     } catch (error) {
       console.error('Error loading discovery feed:', error)
     } finally {
@@ -57,6 +70,13 @@ export const useMatchesStore = defineStore('matches', () => {
 
       // Avanzar al siguiente perfil
       currentIndex.value++
+
+      // Cargar más perfiles si se acerca al final de la pila
+      if (currentIndex.value >= candidates.value.length - 3 && !isLoading.value) {
+        currentPage.value++
+        loadDiscoveryFeed(false)
+      }
+
       return result
     } catch (error) {
       console.error('Swipe error:', error)
@@ -73,6 +93,7 @@ export const useMatchesStore = defineStore('matches', () => {
     candidates,
     matches,
     currentIndex,
+    currentPage,
     isLoading,
     lastMatch,
     isMatchModalOpen,

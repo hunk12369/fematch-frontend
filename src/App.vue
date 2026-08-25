@@ -2,19 +2,30 @@
 import { onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTelegramStore } from '@/stores/telegram.store'
+import { useUserStore } from '@/stores/user.store'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import BottomNav from '@/components/layout/BottomNav.vue'
 import DevBanner from '@/components/dev/DevBanner.vue'
+import PremiumModal from '@/components/premium/PremiumModal.vue'
 
 const route = useRoute()
 const tgStore = useTelegramStore()
+const userStore = useUserStore()
 
 onMounted(async () => {
+  // Inicializar SDK de Telegram y cargar datos de usuario
   await tgStore.initialize()
+  if (!userStore.isLoaded) {
+    try {
+      await userStore.fetchMe()
+    } catch (e) {
+      console.warn('Init user fetch error in App.vue:', e)
+    }
+  }
 })
 
-const showHeader = computed(() => route.name !== 'chat')
-const showBottomNav = computed(() => route.meta.showBottomNav !== false)
+const showHeader = computed(() => route.name !== 'chat' && route.name !== 'onboarding')
+const showBottomNav = computed(() => route.meta.showBottomNav !== false && route.name !== 'onboarding')
 </script>
 
 <template>
@@ -38,6 +49,9 @@ const showBottomNav = computed(() => route.meta.showBottomNav !== false)
 
     <!-- App Bottom Nav Bar -->
     <BottomNav v-if="showBottomNav" />
+
+    <!-- Global Premium & Telegram Stars Modal -->
+    <PremiumModal />
   </div>
 </template>
 

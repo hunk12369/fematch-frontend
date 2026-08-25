@@ -1,10 +1,21 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { useUserStore } from '@/stores/user.store'
 import DiscoverView from '@/views/DiscoverView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     redirect: '/discover',
+  },
+  {
+    path: '/onboarding',
+    name: 'onboarding',
+    component: () => import('@/views/OnboardingView.vue'),
+    meta: {
+      title: 'Bienvenida a Fematch',
+      showBottomNav: false,
+      isRoot: true,
+    },
   },
   {
     path: '/discover',
@@ -51,6 +62,36 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+/**
+ * Navigation Guard Global:
+ * Al iniciar la app, llama a /api/user/me (a través de userStore.fetchMe()).
+ * Si isNewUser === true, redirige automáticamente a la pantalla de OnboardingView.
+ */
+router.beforeEach(async (to, _from, next) => {
+  const userStore = useUserStore()
+
+  // 1. Obtener perfil de /api/user/me si no está cargado todavía
+  if (!userStore.isLoaded) {
+    try {
+      await userStore.fetchMe()
+    } catch (error) {
+      console.warn('⚠️ [Router Guard] Error al cargar /api/user/me:', error)
+    }
+  }
+
+  // 2. Si es un nuevo usuario (isNewUser === true) y no está en /onboarding, redirigir a Onboarding
+  if (userStore.isNewUser && to.name !== 'onboarding') {
+    return next({ name: 'onboarding' })
+  }
+
+  // 3. Si ya completó el onboarding e intenta acceder a /onboarding, redirigir a /discover
+  if (!userStore.isNewUser && to.name === 'onboarding') {
+    return next({ name: 'discover' })
+  }
+
+  next()
 })
 
 // Sincronizar el botón BackButton nativo de Telegram WebApp con la navegación de Vue Router
