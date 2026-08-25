@@ -44,7 +44,7 @@ const form = reactive({
   birth_date: '2000-01-01',
   bio: '¡Hola! Acabo de unirme a Fematch. Me encanta conectar con personas afines en la comunidad.',
   city: 'Madrid',
-  target_genders: ['FEMBOY', 'TRANS_FEM', 'TRANS_MASC', 'CROSSDRESSER', 'OTHER'] as string[],
+  target_genders: ['FEMBOY', 'TRANS_FEM', 'TRANS_MASC', 'CROSSDRESSER', 'MAN', 'OTHER'] as string[],
   min_age: 18,
   max_age: 35,
   max_distance_km: 30,

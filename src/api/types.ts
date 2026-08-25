@@ -1,12 +1,15 @@
 import type { TelegramUser } from '@/telegram/types'
 
-export type GenderIdentity = 'FEMBOY' | 'TRANS_FEM' | 'TRANS_MASC' | 'CROSSDRESSER' | 'OTHER'
+export type GenderIdentity = 'FEMBOY' | 'TRANS_FEM' | 'TRANS_MASC' | 'CROSSDRESSER' | 'MAN' | 'OTHER'
 
-export const GENDER_IDENTITY_LABELS: Record<GenderIdentity, string> = {
+export const GENDER_IDENTITY_LABELS: Record<string, string> = {
   FEMBOY: 'Femboy',
   TRANS_FEM: 'Trans Femenina',
   TRANS_MASC: 'Trans Masculino',
   CROSSDRESSER: 'Crossdresser',
+  MAN: 'Hombre',
+  MALE: 'Hombre',
+  HOMBRE: 'Hombre',
   OTHER: 'Otro',
 }
 
@@ -15,6 +18,7 @@ export const GENDER_IDENTITY_OPTIONS: { value: GenderIdentity; label: string }[]
   { value: 'TRANS_FEM', label: 'Trans Femenina' },
   { value: 'TRANS_MASC', label: 'Trans Masculino' },
   { value: 'CROSSDRESSER', label: 'Crossdresser' },
+  { value: 'MAN', label: 'Hombre' },
   { value: 'OTHER', label: 'Otro' },
 ]
 

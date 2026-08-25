@@ -12,7 +12,6 @@ import {
   Crown,
   Heart,
   Sparkles,
-  Send,
   Zap,
   Star,
   ChevronRight,
@@ -31,7 +30,6 @@ const profile = ref<User | null>(null)
 const isLoading = ref(true)
 const isEditModalOpen = ref(false)
 const isUploadingAvatar = ref(false)
-const apiTestStatus = ref<string | null>(null)
 const avatarFileInputRef = ref<HTMLInputElement | null>(null)
 
 onMounted(async () => {
@@ -95,19 +93,6 @@ async function onAvatarFileSelected(event: Event) {
   }
 }
 
-async function testApiCall() {
-  haptics.impact('medium')
-  apiTestStatus.value = 'Enviando petición a la API con Axios...'
-  try {
-    await userService.getMe()
-    apiTestStatus.value = '✅ Petición exitosa con encabezado Authorization: tma ...'
-    haptics.notification('success')
-  } catch (err: any) {
-    apiTestStatus.value = `❌ Error: ${err.message}`
-    haptics.notification('error')
-  }
-}
-
 function openShop(tab: 'vip_subscription' | 'boost' | 'superlikes') {
   premiumStore.openModal(tab)
 }
@@ -118,7 +103,7 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col px-4 py-4 overflow-y-auto no-scrollbar gap-4 pb-12 select-none">
+  <div class="flex flex-col min-h-full overflow-y-auto pb-28 p-4 space-y-4 select-none">
     <!-- Hidden Avatar File Input -->
     <input
       ref="avatarFileInputRef"
@@ -128,162 +113,176 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
       @change="onAvatarFileSelected"
     />
 
-    <!-- User Hero Card -->
+    <!-- ======================================================== -->
+    <!-- 1. USER HERO CARD CON AVATAR PROPORCIONAL Y NÍTIDO      -->
+    <!-- ======================================================== -->
     <div
-      class="relative p-5 rounded-3xl bg-tg-secondary-bg border border-fematch-pink-200 dark:border-fematch-violet-900/60 shadow-sm overflow-hidden flex flex-col items-center text-center"
+      class="relative p-6 rounded-3xl bg-tg-secondary-bg border border-fematch-pink-200 dark:border-fematch-violet-900/60 shadow-sm overflow-hidden flex flex-col items-center text-center flex-shrink-0"
     >
-      <!-- Background Ambient Glow -->
-      <div class="absolute -top-10 -right-10 w-36 h-36 bg-fematch-pink-400/20 rounded-full blur-2xl pointer-events-none" />
-      <div class="absolute -bottom-10 -left-10 w-36 h-36 bg-fematch-cyan-400/20 rounded-full blur-2xl pointer-events-none" />
+      <!-- Background Ambient Glows -->
+      <div class="absolute -top-12 -right-12 w-44 h-44 bg-fematch-pink-400/20 rounded-full blur-3xl pointer-events-none" />
+      <div class="absolute -bottom-12 -left-12 w-44 h-44 bg-fematch-cyan-400/20 rounded-full blur-3xl pointer-events-none" />
 
-      <!-- Edit Profile Floating Action Button -->
-      <button
-        type="button"
-        @click="openEditModal"
-        class="absolute top-4 right-4 p-2 rounded-full bg-tg-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-fematch-pink-600 dark:text-fematch-pink-400 shadow-sm active:scale-90 transition-transform"
-        title="Editar mi perfil"
-      >
-        <Edit3 class="w-4 h-4" />
-      </button>
+      <!-- Avatar Container con dimensiones w-28 h-28 sm:w-32 sm:h-32 y botón de edición flotante -->
+      <div class="relative mb-4 flex-shrink-0">
+        <div
+          class="w-28 h-28 sm:w-32 sm:h-32 rounded-full p-1 bg-gradient-to-tr from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-400 shadow-pastel-pink cursor-pointer group"
+          @click="triggerAvatarUpload"
+          title="Cambiar foto de perfil"
+        >
+          <div class="w-full h-full rounded-full overflow-hidden border-4 border-fematch-pink-400/30 bg-tg-bg relative">
+            <img
+              :src="profile?.photos[0]?.url || tgStore.user?.photo_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'"
+              :alt="profile?.firstName || tgStore.userFullName"
+              class="w-full h-full object-cover"
+              :class="{ 'opacity-50 blur-xs': isUploadingAvatar }"
+            />
 
-      <!-- Avatar with Gradient Ring & Direct Upload Trigger -->
-      <div class="relative mb-3 group cursor-pointer" @click="triggerAvatarUpload" title="Cambiar foto de portada">
-        <div class="p-1 rounded-full bg-gradient-to-tr from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-400 shadow-pastel-pink relative overflow-hidden">
-          <img
-            :src="profile?.photos[0]?.url || tgStore.user?.photo_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'"
-            :alt="profile?.firstName || tgStore.userFullName"
-            class="w-20 h-20 rounded-full object-cover border-2 border-tg-bg"
-            :class="{ 'opacity-50 blur-xs': isUploadingAvatar }"
-          />
+            <!-- Loading Spinner overlay while uploading to R2 -->
+            <div
+              v-if="isUploadingAvatar"
+              class="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full"
+            >
+              <Loader2 class="w-8 h-8 animate-spin text-white" />
+            </div>
 
-          <!-- Loading Spinner overlay while uploading -->
-          <div
-            v-if="isUploadingAvatar"
-            class="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full"
-          >
-            <Loader2 class="w-6 h-6 animate-spin text-white" />
-          </div>
-
-          <!-- Camera Icon Overlay on Hover/Touch -->
-          <div
-            v-else
-            class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-full"
-          >
-            <Camera class="w-5 h-5 text-white drop-shadow" />
+            <!-- Hover overlay -->
+            <div
+              v-else
+              class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-full"
+            >
+              <Camera class="w-6 h-6 text-white drop-shadow" />
+            </div>
           </div>
         </div>
 
+        <!-- Botón Flotante de Cámara / Edición de Foto -->
+        <button
+          type="button"
+          @click="triggerAvatarUpload"
+          class="absolute bottom-0 right-0 p-2 rounded-full bg-gradient-to-r from-fematch-pink-500 to-fematch-violet-500 text-white shadow-lg active:scale-90 transition-transform border-2 border-tg-secondary-bg flex items-center justify-center z-10"
+          title="Subir nueva foto"
+        >
+          <Camera class="w-4 h-4" />
+        </button>
+
+        <!-- VIP Crown Badge -->
         <div
           v-if="profile?.isVip || tgStore.user?.is_premium || premiumStore.isVip"
-          class="absolute bottom-0 right-0 p-1 bg-gradient-to-r from-amber-400 to-amber-500 rounded-full text-white shadow-sm"
-          title="Telegram Premium & Fematch VIP"
+          class="absolute top-0 right-0 p-1.5 bg-gradient-to-r from-amber-400 to-amber-500 rounded-full text-white shadow-md border-2 border-tg-secondary-bg z-10"
+          title="VIP Fematch"
         >
           <Crown class="w-3.5 h-3.5 fill-white" />
         </div>
       </div>
 
-      <!-- Names, Age & Verification -->
-      <h2 class="text-xl font-extrabold text-tg-text flex items-center gap-1.5">
+      <!-- Nombre, Edad y Verificación -->
+      <h2 class="text-2xl font-black text-tg-text flex items-center justify-center gap-1.5 mb-1">
         <span>{{ profile?.firstName || tgStore.userFullName }}, {{ profile?.age || 26 }}</span>
         <ShieldCheck class="w-5 h-5 text-fematch-cyan-500" />
       </h2>
 
-      <div class="flex items-center gap-2 text-xs text-fematch-pink-600 dark:text-fematch-pink-400 font-semibold mb-1">
+      <!-- Username & Identidad de Género Badge -->
+      <div class="flex items-center justify-center gap-2 text-xs text-fematch-pink-600 dark:text-fematch-pink-400 font-semibold mb-2">
         <span>@{{ profile?.username || tgStore.user?.username || 'fematch_user' }}</span>
         <span>•</span>
-        <span class="px-2 py-0.5 rounded-full bg-fematch-pink-100 dark:bg-fematch-pink-950 text-[10px]">
+        <span class="px-2.5 py-0.5 rounded-full bg-fematch-pink-100 dark:bg-fematch-pink-950/80 text-[11px] font-bold">
           {{ profile?.genderIdentity ? (GENDER_IDENTITY_LABELS[profile.genderIdentity as keyof typeof GENDER_IDENTITY_LABELS] || profile.genderIdentity) : 'Trans Femenina' }}
         </span>
       </div>
 
-      <!-- City / Location -->
-      <div v-if="profile?.city" class="flex items-center gap-1 text-[11px] text-tg-hint mb-3">
-        <MapPin class="w-3 h-3 text-fematch-cyan-500" />
+      <!-- Ubicación / Ciudad -->
+      <div v-if="profile?.city" class="flex items-center justify-center gap-1 text-xs text-tg-hint mb-4">
+        <MapPin class="w-3.5 h-3.5 text-fematch-cyan-500" />
         <span>{{ profile.city }}</span>
       </div>
 
-      <!-- Action Buttons Row (Editar & Filtros) -->
-      <div class="flex items-center gap-2 w-full mb-3">
+      <!-- Botones de Acción (Editar Perfil & Filtros) -->
+      <div class="flex items-center gap-2 w-full mb-4">
         <button
           type="button"
           @click="openEditModal"
-          class="flex-1 py-2 px-3 rounded-2xl bg-gradient-to-r from-fematch-pink-500 to-fematch-violet-500 text-white font-bold text-xs shadow-pastel-pink active:scale-95 transition-transform flex items-center justify-center gap-1.5"
+          class="flex-1 py-3 px-4 rounded-2xl bg-gradient-to-r from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-500 text-white font-extrabold text-xs shadow-pastel-pink active:scale-95 transition-transform flex items-center justify-center gap-2"
         >
-          <Edit3 class="w-3.5 h-3.5" />
-          <span>Editar Perfil</span>
+          <Edit3 class="w-4 h-4" />
+          <span>Editar Mi Perfil</span>
         </button>
 
         <button
           type="button"
           @click="openEditModal"
-          class="p-2 rounded-2xl bg-tg-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-tg-text active:scale-95 transition-transform flex items-center justify-center"
+          class="p-3 rounded-2xl bg-tg-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-tg-text active:scale-95 transition-transform flex items-center justify-center"
           title="Filtros de Búsqueda"
         >
           <Sliders class="w-4 h-4 text-fematch-violet-500" />
         </button>
       </div>
 
-      <!-- Stats Bar -->
-      <div class="grid grid-cols-3 gap-2 w-full pt-3 border-t border-fematch-pink-100 dark:border-fematch-violet-900/40">
-        <div class="p-2 rounded-2xl bg-tg-bg">
-          <span class="block text-sm font-black text-fematch-pink-500">
+      <!-- Stats Bar (Matches, Likes, Superlikes) -->
+      <div class="grid grid-cols-3 gap-2 w-full pt-4 border-t border-fematch-pink-100 dark:border-fematch-violet-900/40">
+        <div class="p-2.5 rounded-2xl bg-tg-bg">
+          <span class="block text-base font-black text-fematch-pink-500">
             {{ profile?.matchesCount || 28 }}
           </span>
-          <span class="text-[10px] text-tg-hint font-medium">Matches</span>
+          <span class="text-[10px] text-tg-hint font-bold uppercase tracking-wider">Matches</span>
         </div>
-        <div class="p-2 rounded-2xl bg-tg-bg">
-          <span class="block text-sm font-black text-fematch-violet-500">
+        <div class="p-2.5 rounded-2xl bg-tg-bg">
+          <span class="block text-base font-black text-fematch-violet-500">
             {{ profile?.likesCount || 142 }}
           </span>
-          <span class="text-[10px] text-tg-hint font-medium">Likes</span>
+          <span class="text-[10px] text-tg-hint font-bold uppercase tracking-wider">Likes</span>
         </div>
-        <div class="p-2 rounded-2xl bg-tg-bg">
-          <span class="block text-sm font-black text-amber-500">
+        <div class="p-2.5 rounded-2xl bg-tg-bg">
+          <span class="block text-base font-black text-amber-500">
             {{ premiumStore.superlikesCount }} ⭐
           </span>
-          <span class="text-[10px] text-tg-hint font-medium">Superlikes</span>
+          <span class="text-[10px] text-tg-hint font-bold uppercase tracking-wider">Superlikes</span>
         </div>
       </div>
     </div>
 
-    <!-- VIP / Premium Promotion Banner (Tienda) -->
+    <!-- ======================================================== -->
+    <!-- 2. BANNER VIP ("Fematch VIP & Stars") FLUIDO Y COMPLETO -->
+    <!-- ======================================================== -->
     <div
-      class="relative p-4 rounded-3xl bg-gradient-to-r from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-500 text-white shadow-pastel-pink overflow-hidden cursor-pointer active:scale-[0.99] transition-transform"
+      class="relative p-4 rounded-3xl bg-gradient-to-r from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-500 text-white shadow-pastel-pink overflow-hidden cursor-pointer active:scale-[0.99] transition-transform flex-shrink-0 min-h-[72px] flex items-center justify-between"
       @click="openShop('vip_subscription')"
     >
       <div class="absolute -right-6 -bottom-6 w-28 h-28 bg-white/10 rounded-full blur-xl pointer-events-none" />
 
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center flex-shrink-0">
-            <Crown class="w-6 h-6 text-amber-300 fill-amber-300" />
-          </div>
-          <div>
-            <div class="flex items-center gap-1.5">
-              <h3 class="text-sm font-black">Fematch VIP & Stars</h3>
-              <span class="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black text-[9px]">NUEVO</span>
-            </div>
-            <p class="text-[11px] text-white/90">
-              Likes ilimitados, Boosts y pagos nativos con Telegram Stars.
-            </p>
-          </div>
+      <div class="flex items-center gap-3.5 flex-1 min-w-0 pr-2">
+        <div class="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center flex-shrink-0">
+          <Crown class="w-6 h-6 text-amber-300 fill-amber-300" />
         </div>
-
-        <ChevronRight class="w-5 h-5 flex-shrink-0 text-white/80" />
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5 mb-0.5">
+            <h3 class="text-sm font-black truncate">Fematch VIP & Stars</h3>
+            <span class="px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black text-[9px] flex-shrink-0">
+              NUEVO
+            </span>
+          </div>
+          <p class="text-[11px] text-white/90 leading-tight truncate">
+            Likes ilimitados, Boosts y compras en Telegram Stars.
+          </p>
+        </div>
       </div>
+
+      <ChevronRight class="w-5 h-5 flex-shrink-0 text-white/80" />
     </div>
 
-    <!-- Quick Purchase Grid (Boost & Superlikes) -->
-    <div class="grid grid-cols-2 gap-3">
+    <!-- ======================================================== -->
+    <!-- 3. COMPRAS RÁPIDAS (BOOST & SUPERLIKES)                  -->
+    <!-- ======================================================== -->
+    <div class="grid grid-cols-2 gap-3 flex-shrink-0">
       <div
         @click="openShop('boost')"
-        class="p-3.5 rounded-2xl bg-tg-secondary-bg border border-fematch-violet-200 dark:border-fematch-violet-900/60 cursor-pointer active:scale-95 transition-transform"
+        class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-violet-200 dark:border-fematch-violet-900/60 cursor-pointer active:scale-95 transition-transform shadow-xs"
       >
         <div class="flex items-center justify-between mb-2">
           <div class="p-2 rounded-xl bg-fematch-violet-500/15 text-fematch-violet-500">
             <Zap class="w-4 h-4 fill-fematch-violet-500" />
           </div>
-          <span class="text-[10px] font-bold text-amber-500">100 ⭐</span>
+          <span class="text-[11px] font-extrabold text-amber-500">100 ⭐</span>
         </div>
         <h4 class="text-xs font-bold text-tg-text">Boost de 24 Horas</h4>
         <span class="text-[10px] text-tg-hint">x10 Visibilidad en Swipes</span>
@@ -291,21 +290,23 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
 
       <div
         @click="openShop('superlikes')"
-        class="p-3.5 rounded-2xl bg-tg-secondary-bg border border-fematch-cyan-200 dark:border-fematch-cyan-900/60 cursor-pointer active:scale-95 transition-transform"
+        class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-cyan-200 dark:border-fematch-cyan-900/60 cursor-pointer active:scale-95 transition-transform shadow-xs"
       >
         <div class="flex items-center justify-between mb-2">
           <div class="p-2 rounded-xl bg-fematch-cyan-500/15 text-fematch-cyan-500">
             <Star class="w-4 h-4 fill-fematch-cyan-500" />
           </div>
-          <span class="text-[10px] font-bold text-amber-500">Desde 50 ⭐</span>
+          <span class="text-[11px] font-extrabold text-amber-500">Desde 50 ⭐</span>
         </div>
         <h4 class="text-xs font-bold text-tg-text">Pack Superlikes</h4>
         <span class="text-[10px] text-tg-hint">Destaca en el feed</span>
       </div>
     </div>
 
-    <!-- Bio Card -->
-    <div v-if="profile?.bio" class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 space-y-2">
+    <!-- ======================================================== -->
+    <!-- 4. BIO DEL USUARIO                                       -->
+    <!-- ======================================================== -->
+    <div v-if="profile?.bio" class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 space-y-2 flex-shrink-0">
       <div class="flex items-center justify-between">
         <h3 class="text-xs font-bold uppercase tracking-wider text-tg-hint flex items-center gap-1.5">
           <Heart class="w-3.5 h-3.5 text-fematch-pink-500" />
@@ -325,8 +326,10 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
       </p>
     </div>
 
-    <!-- Search Preferences Info Card -->
-    <div class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 space-y-2.5">
+    <!-- ======================================================== -->
+    <!-- 5. PREFERENCIAS DEL RADAR                                -->
+    <!-- ======================================================== -->
+    <div class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 space-y-2.5 flex-shrink-0">
       <div class="flex items-center justify-between">
         <h3 class="text-xs font-bold uppercase tracking-wider text-tg-hint flex items-center gap-1.5">
           <MapPin class="w-3.5 h-3.5 text-fematch-cyan-400" />
@@ -342,85 +345,57 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
       </div>
 
       <div class="grid grid-cols-2 gap-2 text-xs text-tg-text">
-        <div class="p-2 rounded-xl bg-tg-bg">
+        <div class="p-2.5 rounded-xl bg-tg-bg">
           <span class="text-[10px] text-tg-hint block">Distancia Máxima</span>
-          <span class="font-bold text-fematch-cyan-500">
+          <span class="font-extrabold text-fematch-cyan-500">
             Hasta {{ profile?.preference?.maxDistanceKm || 30 }} km
           </span>
         </div>
 
-        <div class="p-2 rounded-xl bg-tg-bg">
+        <div class="p-2.5 rounded-xl bg-tg-bg">
           <span class="text-[10px] text-tg-hint block">Rango de Edad</span>
-          <span class="font-bold text-fematch-pink-500">
+          <span class="font-extrabold text-fematch-pink-500">
             {{ profile?.preference?.minAge || 18 }} - {{ profile?.preference?.maxAge || 35 }} años
           </span>
         </div>
       </div>
     </div>
 
-    <!-- Centralized Axios & TMA Authorization Demo Card -->
-    <div class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-violet-200 dark:border-fematch-violet-900/60 space-y-3">
-      <div class="flex items-center justify-between">
-        <h3 class="text-xs font-bold uppercase tracking-wider text-fematch-violet-600 dark:text-fematch-violet-400 flex items-center gap-1.5">
-          <Zap class="w-3.5 h-3.5" />
-          <span>API & Auth Header TMA</span>
-        </h3>
-        <span class="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-          Axios Ready
-        </span>
-      </div>
-
-      <p class="text-xs text-tg-hint leading-relaxed">
-        Todas las peticiones a la API adjuntan automáticamente la cabecera:
-      </p>
-
-      <div class="p-2.5 rounded-xl bg-black/80 font-mono text-[11px] text-emerald-400 break-all select-all">
-        Authorization: tma {{ tgStore.initData || 'query_id=...&user=...' }}
-      </div>
-
-      <button
-        @click="testApiCall"
-        class="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-500 text-white font-bold text-xs shadow-pastel-pink active:scale-95 transition-transform flex items-center justify-center gap-2"
-      >
-        <Send class="w-3.5 h-3.5" />
-        <span>Probar Petición con Axios Interceptor</span>
-      </button>
-
-      <div v-if="apiTestStatus" class="text-xs font-semibold text-fematch-pink-600 dark:text-fematch-pink-300">
-        {{ apiTestStatus }}
-      </div>
-    </div>
-
-    <!-- Haptics Test Playground -->
-    <div class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-cyan-100 dark:border-fematch-cyan-900/40 space-y-2.5">
+    <!-- ======================================================== -->
+    <!-- 6. HAPTICS PLAYGROUND                                    -->
+    <!-- ======================================================== -->
+    <div class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-cyan-100 dark:border-fematch-cyan-900/40 space-y-2.5 flex-shrink-0">
       <h3 class="text-xs font-bold uppercase tracking-wider text-fematch-cyan-600 dark:text-fematch-cyan-400 flex items-center gap-1.5">
         <Sparkles class="w-3.5 h-3.5" />
-        <span>Telegram Haptic Feedback</span>
+        <span>Vibración Háptica Telegram</span>
       </h3>
 
       <div class="grid grid-cols-3 gap-2">
         <button
+          type="button"
           @click="testHaptic('light')"
-          class="py-2 px-2 rounded-xl bg-tg-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-xs font-semibold text-tg-text active:scale-95"
+          class="py-2.5 px-2 rounded-xl bg-tg-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-xs font-bold text-tg-text active:scale-95 transition-transform"
         >
-          Light
+          Suave
         </button>
         <button
+          type="button"
           @click="testHaptic('medium')"
-          class="py-2 px-2 rounded-xl bg-tg-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-xs font-semibold text-tg-text active:scale-95"
+          class="py-2.5 px-2 rounded-xl bg-tg-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-xs font-bold text-tg-text active:scale-95 transition-transform"
         >
-          Medium
+          Media
         </button>
         <button
+          type="button"
           @click="testHaptic('heavy')"
-          class="py-2 px-2 rounded-xl bg-tg-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-xs font-semibold text-tg-text active:scale-95"
+          class="py-2.5 px-2 rounded-xl bg-tg-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-xs font-bold text-tg-text active:scale-95 transition-transform"
         >
-          Heavy
+          Fuerte
         </button>
       </div>
     </div>
 
-    <!-- Edit Profile Modal -->
+    <!-- Modal de Edición de Perfil -->
     <EditProfileModal
       :is-open="isEditModalOpen"
       :profile="profile"

@@ -48,7 +48,7 @@ const form = reactive({
   bio: '',
   city: 'Madrid',
   photos: [] as UserPhoto[],
-  target_genders: ['FEMBOY', 'TRANS_FEM', 'TRANS_MASC', 'CROSSDRESSER', 'OTHER'] as string[],
+  target_genders: ['FEMBOY', 'TRANS_FEM', 'TRANS_MASC', 'CROSSDRESSER', 'MAN', 'OTHER'] as string[],
   min_age: 18,
   max_age: 35,
   max_distance_km: 30,
@@ -81,7 +81,7 @@ watch(
       form.photos = p.photos ? [...p.photos] : []
       form.target_genders = p.preference?.targetGenders
         ? [...p.preference.targetGenders]
-        : ['FEMBOY', 'TRANS_FEM', 'TRANS_MASC', 'CROSSDRESSER', 'OTHER']
+        : ['FEMBOY', 'TRANS_FEM', 'TRANS_MASC', 'CROSSDRESSER', 'MAN', 'OTHER']
       form.min_age = p.preference?.minAge || 18
       form.max_age = p.preference?.maxAge || 35
       form.max_distance_km = p.preference?.maxDistanceKm || 30
