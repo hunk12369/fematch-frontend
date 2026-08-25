@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useTelegramStore } from '@/stores/telegram.store'
-import type { MatchCandidate } from '@/api/types'
+import type { User } from '@/api/types'
 import { MessageCircle, Sparkles, Heart } from 'lucide-vue-next'
 import { useHaptics } from '@/composables/useHaptics'
 
 const props = defineProps<{
   isOpen: boolean
-  matchedCandidate: MatchCandidate | null
+  matchedCandidate: User | null
 }>()
 
 const emit = defineEmits<{
@@ -60,7 +60,7 @@ function onKeepSwiping() {
         ¡Es un Match!
       </h2>
       <p class="text-xs text-gray-300 mb-6">
-        Tú y <span class="font-bold text-white">{{ matchedCandidate.name }}</span> se han gustado mutuamente.
+        Tú y <span class="font-bold text-white">{{ matchedCandidate.firstName }}</span> se han gustado mutuamente.
       </p>
 
       <!-- Intersecting User Avatars with Heart Badge -->
@@ -88,8 +88,8 @@ function onKeepSwiping() {
           class="w-22 h-22 rounded-full ring-4 ring-fematch-cyan-400 overflow-hidden shadow-pastel-cyan -ml-4 z-10"
         >
           <img
-            :src="matchedCandidate.photos[0]"
-            :alt="matchedCandidate.name"
+            :src="matchedCandidate.photos[0]?.url || 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=300&q=80'"
+            :alt="matchedCandidate.firstName"
             class="w-full h-full object-cover"
           />
         </div>
@@ -98,14 +98,16 @@ function onKeepSwiping() {
       <!-- Action Buttons -->
       <div class="flex flex-col gap-3">
         <button
+          type="button"
           @click="onChatNow"
           class="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-500 text-white font-bold text-sm shadow-pastel-pink active:scale-95 transition-transform flex items-center justify-center gap-2"
         >
           <MessageCircle class="w-4 h-4" />
-          <span>Enviar Mensaje</span>
+          <span>Ver Conexión</span>
         </button>
 
         <button
+          type="button"
           @click="onKeepSwiping"
           class="w-full py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/15 text-gray-200 font-semibold text-xs transition-colors"
         >

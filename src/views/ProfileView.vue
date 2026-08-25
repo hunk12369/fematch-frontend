@@ -3,7 +3,8 @@ import { ref, onMounted } from 'vue'
 import { useTelegramStore } from '@/stores/telegram.store'
 import { usePremiumStore } from '@/stores/premium.store'
 import { userService } from '@/api/services/user.service'
-import type { UserProfile } from '@/api/types'
+import type { User } from '@/api/types'
+import { GENDER_IDENTITY_LABELS } from '@/api/types'
 import { useHaptics } from '@/composables/useHaptics'
 import EditProfileModal from '@/components/profile/EditProfileModal.vue'
 import {
@@ -18,7 +19,6 @@ import {
   Edit3,
   Sliders,
   MapPin,
-  Briefcase,
   Camera,
   Loader2,
 } from 'lucide-vue-next'
@@ -27,7 +27,7 @@ const tgStore = useTelegramStore()
 const premiumStore = usePremiumStore()
 const haptics = useHaptics()
 
-const profile = ref<UserProfile | null>(null)
+const profile = ref<User | null>(null)
 const isLoading = ref(true)
 const isEditModalOpen = ref(false)
 const isUploadingAvatar = ref(false)
@@ -36,7 +36,8 @@ const avatarFileInputRef = ref<HTMLInputElement | null>(null)
 
 onMounted(async () => {
   try {
-    profile.value = await userService.getMe()
+    const res = await userService.getMe()
+    profile.value = res.user
   } finally {
     isLoading.value = false
   }
@@ -47,7 +48,7 @@ function openEditModal() {
   isEditModalOpen.value = true
 }
 
-function handleProfileSaved(updated: UserProfile) {
+function handleProfileSaved(updated: User) {
   profile.value = updated
 }
 
@@ -76,12 +77,12 @@ async function onAvatarFileSelected(event: Event) {
   haptics.impact('medium')
 
   try {
-    const newPhotoUrl = await userService.uploadPhoto(file)
+    const newPhotoUrl = await userService.uploadPhoto(file, 0)
     if (newPhotoUrl && profile.value) {
-      // Colocar como primera foto (portada)
-      const currentPhotos = profile.value.photos ? [...profile.value.photos] : []
-      const filtered = currentPhotos.filter((p) => p !== newPhotoUrl)
-      profile.value.photos = [newPhotoUrl, ...filtered]
+      profile.value.photos = [
+        { id: `photo_${Date.now()}`, url: newPhotoUrl, orderIndex: 0 },
+        ...profile.value.photos.filter((p) => p.url !== newPhotoUrl),
+      ]
       haptics.notification('success')
     }
   } catch (error: any) {
@@ -117,7 +118,7 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
 </script>
 
 <template>
-  <div class="flex-1 flex flex-col px-4 py-4 overflow-y-auto no-scrollbar gap-4 pb-12">
+  <div class="flex-1 flex flex-col px-4 py-4 overflow-y-auto no-scrollbar gap-4 pb-12 select-none">
     <!-- Hidden Avatar File Input -->
     <input
       ref="avatarFileInputRef"
@@ -149,8 +150,8 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
       <div class="relative mb-3 group cursor-pointer" @click="triggerAvatarUpload" title="Cambiar foto de portada">
         <div class="p-1 rounded-full bg-gradient-to-tr from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-400 shadow-pastel-pink relative overflow-hidden">
           <img
-            :src="profile?.photos[0] || tgStore.user?.photo_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'"
-            :alt="profile?.name || tgStore.userFullName"
+            :src="profile?.photos[0]?.url || tgStore.user?.photo_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'"
+            :alt="profile?.firstName || tgStore.userFullName"
             class="w-20 h-20 rounded-full object-cover border-2 border-tg-bg"
             :class="{ 'opacity-50 blur-xs': isUploadingAvatar }"
           />
@@ -173,7 +174,7 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
         </div>
 
         <div
-          v-if="tgStore.user?.is_premium || premiumStore.isVip"
+          v-if="profile?.isVip || tgStore.user?.is_premium || premiumStore.isVip"
           class="absolute bottom-0 right-0 p-1 bg-gradient-to-r from-amber-400 to-amber-500 rounded-full text-white shadow-sm"
           title="Telegram Premium & Fematch VIP"
         >
@@ -183,25 +184,22 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
 
       <!-- Names, Age & Verification -->
       <h2 class="text-xl font-extrabold text-tg-text flex items-center gap-1.5">
-        <span>{{ profile?.name || tgStore.userFullName }}, {{ profile?.age || 26 }}</span>
+        <span>{{ profile?.firstName || tgStore.userFullName }}, {{ profile?.age || 26 }}</span>
         <ShieldCheck class="w-5 h-5 text-fematch-cyan-500" />
       </h2>
 
       <div class="flex items-center gap-2 text-xs text-fematch-pink-600 dark:text-fematch-pink-400 font-semibold mb-1">
-        <span>@{{ tgStore.user?.username || 'fematch_user' }}</span>
+        <span>@{{ profile?.username || tgStore.user?.username || 'fematch_user' }}</span>
         <span>•</span>
         <span class="px-2 py-0.5 rounded-full bg-fematch-pink-100 dark:bg-fematch-pink-950 text-[10px]">
-          {{ profile?.gender_identity || 'Lesbiana' }}
+          {{ profile?.genderIdentity ? (GENDER_IDENTITY_LABELS[profile.genderIdentity as keyof typeof GENDER_IDENTITY_LABELS] || profile.genderIdentity) : 'Trans Femenina' }}
         </span>
       </div>
 
-      <!-- Pronouns & Occupation -->
-      <div class="flex items-center gap-3 text-[11px] text-tg-hint mb-3">
-        <span v-if="profile?.pronouns">{{ profile.pronouns }}</span>
-        <span v-if="profile?.occupation" class="flex items-center gap-1">
-          <Briefcase class="w-3 h-3 text-fematch-violet-400" />
-          <span>{{ profile.occupation }}</span>
-        </span>
+      <!-- City / Location -->
+      <div v-if="profile?.city" class="flex items-center gap-1 text-[11px] text-tg-hint mb-3">
+        <MapPin class="w-3 h-3 text-fematch-cyan-500" />
+        <span>{{ profile.city }}</span>
       </div>
 
       <!-- Action Buttons Row (Editar & Filtros) -->
@@ -306,14 +304,13 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
       </div>
     </div>
 
-    <!-- Bio & Interests Card -->
-    <div class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 space-y-3">
+    <!-- Bio Card -->
+    <div v-if="profile?.bio" class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 space-y-2">
       <div class="flex items-center justify-between">
         <h3 class="text-xs font-bold uppercase tracking-wider text-tg-hint flex items-center gap-1.5">
           <Heart class="w-3.5 h-3.5 text-fematch-pink-500" />
           <span>Sobre Mí</span>
         </h3>
-
         <button
           type="button"
           @click="openEditModal"
@@ -324,25 +321,8 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
       </div>
 
       <p class="text-xs text-tg-text leading-relaxed">
-        {{ profile?.bio || 'Creativa, amante del café de especialidad y la buena música. Buscando conectar con personas afines.' }}
+        {{ profile.bio }}
       </p>
-
-      <div class="flex flex-wrap gap-1.5 pt-1">
-        <span
-          v-for="(interest, i) in profile?.interests || ['Diseño UI', 'Fotografía', 'Arte Moderno', 'Café', 'Plantas']"
-          :key="interest"
-          class="px-2.5 py-1 rounded-full text-[11px] font-semibold"
-          :class="[
-            i % 3 === 0
-              ? 'bg-fematch-pink-100 dark:bg-fematch-pink-950/60 text-fematch-pink-700 dark:text-fematch-pink-300'
-              : i % 3 === 1
-              ? 'bg-fematch-violet-100 dark:bg-fematch-violet-950/60 text-fematch-violet-700 dark:text-fematch-violet-300'
-              : 'bg-fematch-cyan-100 dark:bg-fematch-cyan-950/60 text-fematch-cyan-700 dark:text-fematch-cyan-300'
-          ]"
-        >
-          {{ interest }}
-        </span>
-      </div>
     </div>
 
     <!-- Search Preferences Info Card -->
@@ -365,14 +345,14 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
         <div class="p-2 rounded-xl bg-tg-bg">
           <span class="text-[10px] text-tg-hint block">Distancia Máxima</span>
           <span class="font-bold text-fematch-cyan-500">
-            Hasta {{ profile?.search_preferences?.maxDistanceKm || 30 }} km
+            Hasta {{ profile?.preference?.maxDistanceKm || 30 }} km
           </span>
         </div>
 
         <div class="p-2 rounded-xl bg-tg-bg">
           <span class="text-[10px] text-tg-hint block">Rango de Edad</span>
           <span class="font-bold text-fematch-pink-500">
-            {{ profile?.search_preferences?.minAge || 21 }} - {{ profile?.search_preferences?.maxAge || 35 }} años
+            {{ profile?.preference?.minAge || 18 }} - {{ profile?.preference?.maxAge || 35 }} años
           </span>
         </div>
       </div>

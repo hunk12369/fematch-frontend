@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { MatchCandidate } from '@/api/types'
+import { GENDER_IDENTITY_LABELS } from '@/api/types'
 import {
   Heart,
   X,
   Star,
   MapPin,
-  BadgeCheck,
   Sparkles,
   Info,
+  Crown,
 } from 'lucide-vue-next'
 import { useHaptics } from '@/composables/useHaptics'
 
@@ -77,9 +78,16 @@ const superlikeOpacity = computed(() => {
   return Math.min(1, Math.abs(deltaY.value) / Math.abs(THRESHOLD_Y_SUPERLIKE))
 })
 
+// URL de la foto activa
+const currentPhotoUrl = computed(() => {
+  const photos = props.candidate.photos || []
+  if (photos.length === 0) return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80'
+  const current = photos[activePhotoIndex.value] || photos[0]
+  return current.url
+})
+
 // Estilo de transformación dinámico
 const cardTransformStyle = computed(() => {
-  // Tarjetas secundarias en la pila (Stack Depth)
   if (!props.isTop) {
     const scale = 1 - props.indexOffset * 0.05
     const translateY = props.indexOffset * 10
@@ -91,7 +99,6 @@ const cardTransformStyle = computed(() => {
     }
   }
 
-  // Tarjeta superior siendo arrastrada
   if (isDragging.value) {
     return {
       transform: `translate3d(${deltaX.value}px, ${deltaY.value}px, 0) rotate(${rotationDeg.value}deg)`,
@@ -101,7 +108,6 @@ const cardTransformStyle = computed(() => {
     }
   }
 
-  // Animación de salida al confirmar swipe
   if (isAnimatingOut.value) {
     return {
       transform: `translate3d(${currentX.value}px, ${currentY.value}px, 0) rotate(${rotationDeg.value}deg)`,
@@ -111,7 +117,6 @@ const cardTransformStyle = computed(() => {
     }
   }
 
-  // Tarjeta en reposo (rebote suave al centro)
   return {
     transform: 'translate3d(0, 0, 0) rotate(0deg)',
     zIndex: 20,
@@ -120,11 +125,10 @@ const cardTransformStyle = computed(() => {
   }
 })
 
-// Handlers de gestos (Pointer Events compatibles con Touch y Mouse)
+// Handlers de gestos
 function onPointerDown(e: PointerEvent) {
   if (!props.isTop || isAnimatingOut.value) return
 
-  // Evitar iniciar drag si se hace clic en botones de acción inferiores
   const target = e.target as HTMLElement
   if (target.closest('button')) return
 
@@ -136,7 +140,6 @@ function onPointerDown(e: PointerEvent) {
   currentY.value = e.clientY
   lastThresholdState.value = null
 
-  // Captura de eventos en el elemento para no perder el tracking al salir de los bordes
   ;(e.currentTarget as HTMLElement)?.setPointerCapture?.(e.pointerId)
 }
 
@@ -150,7 +153,6 @@ function onPointerMove(e: PointerEvent) {
   const dy = currentY.value - dragStartY.value
   totalDragDistance.value = Math.hypot(dx, dy)
 
-  // Detectar estado de umbral actual
   let currentAction: 'like' | 'pass' | 'superlike' | null = null
   if (dy < THRESHOLD_Y_SUPERLIKE && Math.abs(dx) < Math.abs(dy) * 0.8) {
     currentAction = 'superlike'
@@ -160,7 +162,6 @@ function onPointerMove(e: PointerEvent) {
     currentAction = 'pass'
   }
 
-  // Disparar vibración háptica ligera al cruzar o cambiar de umbral
   if (currentAction !== lastThresholdState.value) {
     if (currentAction !== null) {
       haptics.impact('light')
@@ -178,18 +179,16 @@ function onPointerUp(e: PointerEvent) {
   try {
     ;(e.currentTarget as HTMLElement)?.releasePointerCapture?.(e.pointerId)
   } catch {
-    // Ignorar si el puntero ya no está capturado
+    // Ignorar
   }
 
   const dx = currentX.value - dragStartX.value
   const dy = currentY.value - dragStartY.value
 
-  // Si el usuario solo hizo un "tap" rápido (< 10px), no procesar swipe (permitir cambio de foto)
   if (totalDragDistance.value < 10) {
     return
   }
 
-  // Evaluar si se superó algún umbral de decisión
   if (dy < THRESHOLD_Y_SUPERLIKE && Math.abs(dx) < Math.abs(dy) * 0.8) {
     triggerSwipeOut('superlike')
   } else if (dx > THRESHOLD_X) {
@@ -197,7 +196,6 @@ function onPointerUp(e: PointerEvent) {
   } else if (dx < -THRESHOLD_X) {
     triggerSwipeOut('pass')
   } else {
-    // No se superó el umbral -> Retorno elástico al centro
     emit('drag', { dx: 0, dy: 0, action: null })
   }
 }
@@ -208,9 +206,6 @@ function onPointerCancel() {
   emit('drag', { dx: 0, dy: 0, action: null })
 }
 
-/**
- * Ejecuta la animación de salida de la tarjeta en la dirección elegida
- */
 function triggerSwipeOut(action: 'like' | 'pass' | 'superlike') {
   isAnimatingOut.value = true
 
@@ -225,21 +220,19 @@ function triggerSwipeOut(action: 'like' | 'pass' | 'superlike') {
     currentY.value = -window.innerHeight * 1.2
   }
 
-  // Esperar a que concluya la animación antes de emitir swipe al componente padre
   setTimeout(() => {
     emit('swipe', action)
     isAnimatingOut.value = false
   }, 280)
 }
 
-// Navegación de fotos con tap en la mitad izquierda o derecha
 function handlePhotoTap(direction: 'prev' | 'next') {
-  // Solo permitir si no se estaba arrastrando
   if (totalDragDistance.value > 10) return
 
   haptics.selection()
+  const photosCount = props.candidate.photos?.length || 1
   if (direction === 'next') {
-    if (activePhotoIndex.value < props.candidate.photos.length - 1) {
+    if (activePhotoIndex.value < photosCount - 1) {
       activePhotoIndex.value++
     } else {
       activePhotoIndex.value = 0
@@ -248,12 +241,11 @@ function handlePhotoTap(direction: 'prev' | 'next') {
     if (activePhotoIndex.value > 0) {
       activePhotoIndex.value--
     } else {
-      activePhotoIndex.value = props.candidate.photos.length - 1
+      activePhotoIndex.value = photosCount - 1
     }
   }
 }
 
-// Exponer método para disparar swipes programáticos desde botones externos
 defineExpose({
   swipeProgrammatically: (action: 'like' | 'pass' | 'superlike') => {
     triggerSwipeOut(action)
@@ -272,8 +264,8 @@ defineExpose({
   >
     <!-- Profile Photos Carousel -->
     <img
-      :src="candidate.photos[activePhotoIndex] || candidate.photos[0]"
-      :alt="candidate.name"
+      :src="currentPhotoUrl"
+      :alt="candidate.firstName"
       draggable="false"
       class="absolute inset-0 w-full h-full object-cover pointer-events-none transition-opacity duration-300 select-none"
     />
@@ -282,7 +274,7 @@ defineExpose({
     <!-- OVERLAY VISUAL STAMP INDICATORS                -->
     <!-- ============================================== -->
 
-    <!-- LIKE Indicator (Right Swipe Stamp: Vibrant Pink & Emerald) -->
+    <!-- LIKE Indicator -->
     <div
       class="absolute top-10 left-6 z-30 pointer-events-none transform -rotate-12 transition-opacity duration-100 ease-out"
       :style="{ opacity: likeOpacity }"
@@ -297,7 +289,7 @@ defineExpose({
       </div>
     </div>
 
-    <!-- NOPE / PASS Indicator (Left Swipe Stamp: Vibrant Red / Rose) -->
+    <!-- NOPE / PASS Indicator -->
     <div
       class="absolute top-10 right-6 z-30 pointer-events-none transform rotate-12 transition-opacity duration-100 ease-out"
       :style="{ opacity: nopeOpacity }"
@@ -312,7 +304,7 @@ defineExpose({
       </div>
     </div>
 
-    <!-- SUPER LIKE Indicator (Up Swipe Stamp: Cyan / Turquoise) -->
+    <!-- SUPER LIKE Indicator -->
     <div
       class="absolute top-12 inset-x-0 mx-auto w-max z-30 pointer-events-none transition-opacity duration-100 ease-out"
       :style="{ opacity: superlikeOpacity }"
@@ -327,9 +319,7 @@ defineExpose({
       </div>
     </div>
 
-    <!-- ============================================== -->
-    <!-- TOUCH ZONES FOR PHOTO SWITCHING                -->
-    <!-- ============================================== -->
+    <!-- TOUCH ZONES FOR PHOTO SWITCHING -->
     <div class="absolute inset-0 flex z-10">
       <div class="w-1/2 h-3/5" @click.stop="handlePhotoTap('prev')" />
       <div class="w-1/2 h-3/5" @click.stop="handlePhotoTap('next')" />
@@ -337,7 +327,7 @@ defineExpose({
 
     <!-- Photo Navigation Dots -->
     <div
-      v-if="candidate.photos.length > 1"
+      v-if="candidate.photos && candidate.photos.length > 1"
       class="absolute top-3 inset-x-4 flex gap-1.5 z-20 pointer-events-none"
     >
       <div
@@ -352,20 +342,21 @@ defineExpose({
       />
     </div>
 
-    <!-- Badges (Top: Distance & Compatibility) -->
+    <!-- Top Badges: Distance & Gender Identity -->
     <div class="absolute top-7 inset-x-4 flex justify-between items-center z-20 pointer-events-none">
       <div
+        v-if="candidate.city || candidate.distanceKm"
         class="flex items-center gap-1 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-xs font-bold text-white shadow-sm"
       >
         <MapPin class="w-3.5 h-3.5 text-fematch-cyan-400" />
-        <span>{{ candidate.distanceKm || 2 }} km</span>
+        <span>{{ candidate.city || `${candidate.distanceKm || 2} km` }}</span>
       </div>
 
       <div
         class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-400 text-xs font-extrabold text-white shadow-pastel-pink"
       >
         <Sparkles class="w-3.5 h-3.5 text-white" />
-        <span>{{ candidate.compatibilityScore }}% Compatible</span>
+        <span>{{ GENDER_IDENTITY_LABELS[candidate.genderIdentity as keyof typeof GENDER_IDENTITY_LABELS] || candidate.genderIdentity }}</span>
       </div>
     </div>
 
@@ -376,15 +367,16 @@ defineExpose({
 
     <!-- Profile Information Container -->
     <div class="relative z-20 p-5 text-white flex flex-col gap-2.5">
-      <!-- Name, Age & Verified Badge -->
+      <!-- Name, Age & VIP Badge -->
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
           <h2 class="text-2xl font-black tracking-tight drop-shadow-md">
-            {{ candidate.name }}, {{ candidate.age }}
+            {{ candidate.firstName }}, {{ candidate.age }}
           </h2>
-          <BadgeCheck
-            v-if="candidate.verified"
-            class="w-6 h-6 text-fematch-cyan-400 fill-fematch-cyan-400/20"
+          <Crown
+            v-if="candidate.isVip"
+            class="w-5 h-5 text-amber-400 fill-amber-400"
+            title="VIP"
           />
         </div>
 
@@ -399,31 +391,14 @@ defineExpose({
 
       <!-- Bio -->
       <p
+        v-if="candidate.bio"
         class="text-xs text-gray-200 leading-relaxed drop-shadow"
         :class="{ 'line-clamp-2': !showFullBio }"
       >
         {{ candidate.bio }}
       </p>
 
-      <!-- Interests Tags -->
-      <div class="flex flex-wrap gap-1.5 pt-1">
-        <span
-          v-for="(interest, i) in candidate.interests"
-          :key="interest"
-          class="px-2.5 py-0.8 rounded-full text-[11px] font-semibold backdrop-blur-md border shadow-xs"
-          :class="[
-            i % 3 === 0
-              ? 'bg-fematch-pink-500/30 border-fematch-pink-400/50 text-fematch-pink-200'
-              : i % 3 === 1
-              ? 'bg-fematch-violet-500/30 border-fematch-violet-400/50 text-fematch-violet-200'
-              : 'bg-fematch-cyan-500/30 border-fematch-cyan-400/50 text-fematch-cyan-200'
-          ]"
-        >
-          {{ interest }}
-        </span>
-      </div>
-
-      <!-- Bottom Swiping Controls (For manual button clicks) -->
+      <!-- Bottom Swiping Controls -->
       <div class="flex items-center justify-center gap-5 pt-3 pb-1">
         <!-- Pass Button -->
         <button

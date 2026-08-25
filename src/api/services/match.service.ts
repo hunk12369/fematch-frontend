@@ -1,43 +1,73 @@
 import { http } from '../client'
 import type {
   ApiResponse,
-  MatchCandidate,
+  User,
   FeedResponse,
   SwipeType,
   SwipePayload,
   SwipeResponse,
-  ChatMessage,
 } from '../types'
 
 export const matchService = {
   /**
    * Obtiene el feed de candidatos desde el backend real
    * GET /api/feed?page=1&limit=20
+   * Mapea cada perfil leyendo firstName, genderIdentity y photos [{ url, orderIndex }]
    */
-  getFeed: async (page = 1, limit = 20): Promise<MatchCandidate[]> => {
+  getFeed: async (page = 1, limit = 20): Promise<User[]> => {
     try {
-      const response = await http.get<ApiResponse<FeedResponse> & FeedResponse>('/api/feed', {
+      const response = await http.get<ApiResponse<FeedResponse> & FeedResponse & { profiles?: User[] }>('/api/feed', {
         page,
         limit,
       })
 
-      // Extraer lista de perfiles del backend
+      let rawProfiles: any[] = []
+
       if (response?.data && Array.isArray(response.data.profiles)) {
-        return response.data.profiles
-      }
-      if (Array.isArray(response?.profiles)) {
-        return response.profiles
-      }
-      if (Array.isArray(response?.data)) {
-        return response.data as unknown as MatchCandidate[]
-      }
-      if (Array.isArray(response)) {
-        return response as unknown as MatchCandidate[]
+        rawProfiles = response.data.profiles
+      } else if (Array.isArray(response?.profiles)) {
+        rawProfiles = response.profiles
+      } else if (Array.isArray(response?.data)) {
+        rawProfiles = response.data
+      } else if (Array.isArray(response)) {
+        rawProfiles = response
       }
 
-      return []
+      // Normalizar objetos de usuario asegurando firstName, genderIdentity y photos
+      const normalizedProfiles: User[] = rawProfiles.map((p) => {
+        const photosList = Array.isArray(p.photos)
+          ? p.photos.map((ph: any, idx: number) => {
+              if (typeof ph === 'string') {
+                return { id: `photo_${idx}`, url: ph, orderIndex: idx }
+              }
+              return {
+                id: ph.id || `photo_${idx}`,
+                url: ph.url || '',
+                orderIndex: ph.orderIndex ?? idx,
+              }
+            })
+          : []
+
+        return {
+          id: p.id,
+          telegramId: String(p.telegramId || ''),
+          firstName: p.firstName || p.name || 'Usuario',
+          username: p.username || '',
+          birthDate: p.birthDate || '',
+          age: Number(p.age) || 20,
+          genderIdentity: p.genderIdentity || p.gender_identity || 'OTHER',
+          bio: p.bio || '',
+          city: p.city || '',
+          isVip: Boolean(p.isVip),
+          photos: photosList,
+          preference: p.preference || undefined,
+          distanceKm: p.distanceKm,
+        }
+      })
+
+      return normalizedProfiles
     } catch (error) {
-      console.warn('⚠️ [matchService.getFeed] Sin perfiles o error en /api/feed:', error)
+      console.warn('⚠️ [matchService.getFeed] Error al cargar feed del backend:', error)
       return []
     }
   },
@@ -45,13 +75,14 @@ export const matchService = {
   /**
    * Alias de compatibilidad para getFeed
    */
-  getDiscoveryFeed: async (page = 1, limit = 20): Promise<MatchCandidate[]> => {
+  getDiscoveryFeed: async (page = 1, limit = 20): Promise<User[]> => {
     return matchService.getFeed(page, limit)
   },
 
   /**
    * Registra swipe (LIKE, DISLIKE, SUPERLIKE) y crea Match si es mutuo
    * POST /api/swipe
+   * Body: { targetUserId, type: "LIKE" | "DISLIKE" | "SUPERLIKE" }
    */
   swipe: async (targetUserId: string, type: SwipeType): Promise<SwipeResponse> => {
     try {
@@ -89,7 +120,7 @@ export const matchService = {
     const result = await matchService.swipe(candidateId, typeMap[action])
     return {
       isMatch: result.match,
-      chatId: result.matchId || (result.match ? `chat_${candidateId}` : undefined),
+      matchId: result.matchId || (result.match ? `match_${candidateId}` : undefined),
       matchedUser: result.matchedUser,
     }
   },
@@ -98,38 +129,34 @@ export const matchService = {
    * Obtiene la lista de matches activos del backend
    * GET /api/matches
    */
-  getMatches: async (): Promise<MatchCandidate[]> => {
+  getMatches: async (): Promise<User[]> => {
     try {
-      const response = await http.get<ApiResponse<MatchCandidate[]> & MatchCandidate[]>('/api/matches')
-      if (Array.isArray(response?.data)) {
-        return response.data
-      }
-      if (Array.isArray(response)) {
-        return response
-      }
-      return []
+      const response = await http.get<ApiResponse<User[]> & User[]>('/api/matches')
+      const rawMatches = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response)
+        ? response
+        : []
+
+      return rawMatches.map((m: any) => ({
+        id: m.id,
+        telegramId: String(m.telegramId || ''),
+        firstName: m.firstName || m.name || 'Match',
+        username: m.username || '',
+        birthDate: m.birthDate || '',
+        age: Number(m.age) || 22,
+        genderIdentity: m.genderIdentity || m.gender_identity || 'OTHER',
+        bio: m.bio || '',
+        city: m.city || '',
+        isVip: Boolean(m.isVip),
+        photos: Array.isArray(m.photos)
+          ? m.photos.map((ph: any, idx: number) =>
+              typeof ph === 'string' ? { id: `photo_${idx}`, url: ph, orderIndex: idx } : ph
+            )
+          : [],
+      }))
     } catch (error) {
       console.warn('⚠️ [matchService.getMatches] Error al obtener matches:', error)
-      return []
-    }
-  },
-
-  /**
-   * Obtiene los mensajes de un chat del backend
-   * GET /api/chats/:chatId/messages
-   */
-  getMessages: async (chatId: string): Promise<ChatMessage[]> => {
-    try {
-      const response = await http.get<ApiResponse<ChatMessage[]> & ChatMessage[]>(`/api/chats/${chatId}/messages`)
-      if (Array.isArray(response?.data)) {
-        return response.data
-      }
-      if (Array.isArray(response)) {
-        return response
-      }
-      return []
-    } catch (error) {
-      console.warn(`⚠️ [matchService.getMessages] Error al obtener mensajes de ${chatId}:`, error)
       return []
     }
   },

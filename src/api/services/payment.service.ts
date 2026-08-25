@@ -127,14 +127,28 @@ export const paymentService = {
    * Genera enlace de pago en Telegram Stars (XTR)
    * POST /api/stars/create-invoice-link
    * Body: { itemType: "VIP_MONTHLY" | "BOOST" | "SUPERLIKE" }
+   * Lee invoiceLink y product.starsAmount o product.stars
    */
   createStarsInvoice: async (product: PremiumProduct): Promise<StarsInvoiceResponse> => {
     try {
-      const response = await http.post<ApiResponse<StarsInvoiceResponse>>('/api/stars/create-invoice-link', {
-        itemType: product.backendItemType || 'VIP_MONTHLY',
-      })
-      if (response.data?.invoiceLink) {
-        return response.data
+      const response = await http.post<ApiResponse<StarsInvoiceResponse> & StarsInvoiceResponse>(
+        '/api/stars/create-invoice-link',
+        {
+          itemType: product.backendItemType || 'VIP_MONTHLY',
+        }
+      )
+
+      const resData = response.data || response
+      if (resData?.invoiceLink) {
+        return {
+          invoiceLink: resData.invoiceLink,
+          product: {
+            itemType: resData.product?.itemType || product.backendItemType,
+            title: resData.product?.title || product.title,
+            stars: resData.product?.starsAmount || resData.product?.stars || product.stars,
+            starsAmount: resData.product?.starsAmount || resData.product?.stars || product.stars,
+          },
+        }
       }
       throw new Error('Sin invoiceLink en respuesta')
     } catch {
@@ -145,6 +159,7 @@ export const paymentService = {
           itemType: product.backendItemType,
           title: product.title,
           stars: product.stars,
+          starsAmount: product.stars,
         },
       }
     }

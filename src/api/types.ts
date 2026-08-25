@@ -1,10 +1,30 @@
 import type { TelegramUser } from '@/telegram/types'
 
+export type GenderIdentity = 'FEMBOY' | 'TRANS_FEM' | 'TRANS_MASC' | 'CROSSDRESSER' | 'OTHER'
+
+export const GENDER_IDENTITY_LABELS: Record<GenderIdentity, string> = {
+  FEMBOY: 'Femboy',
+  TRANS_FEM: 'Trans Femenina',
+  TRANS_MASC: 'Trans Masculino',
+  CROSSDRESSER: 'Crossdresser',
+  OTHER: 'Otro',
+}
+
+export const GENDER_IDENTITY_OPTIONS: { value: GenderIdentity; label: string }[] = [
+  { value: 'FEMBOY', label: 'Femboy' },
+  { value: 'TRANS_FEM', label: 'Trans Femenina' },
+  { value: 'TRANS_MASC', label: 'Trans Masculino' },
+  { value: 'CROSSDRESSER', label: 'Crossdresser' },
+  { value: 'OTHER', label: 'Otro' },
+]
+
 export interface ApiResponse<T = unknown> {
   success: boolean
   data: T
   message?: string
   timestamp?: string
+  isNewUser?: boolean
+  isProfileIncomplete?: boolean
 }
 
 export interface ApiErrorPayload {
@@ -13,54 +33,42 @@ export interface ApiErrorPayload {
   details?: Record<string, unknown>
 }
 
-export interface SearchPreferences {
-  minAge: number
-  maxAge: number
-  maxDistanceKm: number
-  interestedIn: string[]
-}
-
 export interface UserPhoto {
   id: string
   url: string
   orderIndex: number
-  userId?: string
-  createdAt?: string
-  updatedAt?: string
 }
 
-export interface UserProfile {
+export interface Preference {
+  targetGenders: string[]
+  minAge: number
+  maxAge: number
+  maxDistanceKm: number
+}
+
+export interface User {
   id: string
-  telegramId: number
-  name: string
+  telegramId: string
+  firstName: string
+  username?: string
+  birthDate: string
   age: number
-  bio: string
-  gender: 'female' | 'non-binary' | 'other'
-  gender_identity?: string
-  pronouns?: string
-  occupation?: string
+  genderIdentity: GenderIdentity | string
+  bio?: string
   city?: string
-  relationship_intent?: string
-  isNewUser?: boolean
-  onboardingCompleted?: boolean
-  photos: string[]
-  userPhotos?: UserPhoto[]
-  interests: string[]
-  search_preferences?: SearchPreferences
+  isVip: boolean
+  photos: UserPhoto[]
+  preference?: Preference
   distanceKm?: number
-  verified: boolean
-  online: boolean
-  premium: boolean
+  verified?: boolean
+  online?: boolean
   likesCount?: number
   matchesCount?: number
 }
 
-export interface MatchCandidate extends UserProfile {
-  compatibilityScore?: number
-  lastMessage?: string
-  lastMessageTime?: string
-  unreadCount?: number
-}
+// Alias de compatibilidad
+export type UserProfile = User
+export type MatchCandidate = User
 
 export interface MatchInteraction {
   targetUserId: string
@@ -69,24 +77,40 @@ export interface MatchInteraction {
 
 export interface MatchResult {
   isMatch: boolean
-  chatId?: string
-  matchedUser?: MatchCandidate | UserProfile
+  matchId?: string
+  matchedUser?: User
 }
 
 export interface AuthTelegramResponse {
-  user: UserProfile
-  telegramUser: TelegramUser
+  success: boolean
+  isNewUser: boolean
+  isProfileIncomplete: boolean
+  data: {
+    user: User
+    telegramUser: TelegramUser
+  }
 }
 
 export interface AuthMeResponse {
   telegramUser: TelegramUser
   initData: string
-  user?: UserProfile
+  user?: User
+}
+
+export interface OnboardingPayload {
+  gender_identity: GenderIdentity | string
+  birth_date: string // "YYYY-MM-DD"
+  bio?: string
+  city?: string
+  target_genders: string[]
+  min_age: number
+  max_age: number
+  max_distance_km: number
 }
 
 export interface FeedResponse {
-  profiles: MatchCandidate[]
-  pagination: {
+  profiles: User[]
+  pagination?: {
     page: number
     limit: number
     total?: number
@@ -106,7 +130,7 @@ export interface SwipeResponse {
   success: boolean
   match: boolean
   matchId?: string
-  matchedUser?: MatchCandidate
+  matchedUser?: User
   swipe?: Record<string, unknown>
 }
 
@@ -122,14 +146,6 @@ export interface StarsInvoiceResponse {
     itemType: StarsItemType
     title?: string
     stars?: number
+    starsAmount?: number
   }
-}
-
-export interface ChatMessage {
-  id: string
-  senderId: string
-  receiverId: string
-  content: string
-  timestamp: string
-  isRead: boolean
 }

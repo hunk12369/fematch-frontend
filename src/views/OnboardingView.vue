@@ -6,6 +6,10 @@ import { useTelegramStore } from '@/stores/telegram.store'
 import { userService } from '@/api/services/user.service'
 import { useHaptics } from '@/composables/useHaptics'
 import {
+  GENDER_IDENTITY_OPTIONS,
+  type GenderIdentity,
+} from '@/api/types'
+import {
   Sparkles,
   ArrowLeft,
   ArrowRight,
@@ -18,6 +22,7 @@ import {
   Loader2,
   AlertCircle,
   Compass,
+  Calendar,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -33,94 +38,59 @@ const isUploadingPhoto = ref(false)
 const uploadErrorMessage = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
-// Opciones de Identidad
-const GENDER_IDENTITIES = [
-  'Mujer cis',
-  'Mujer trans',
-  'No binaria',
-  'Lesbiana',
-  'Bisexual',
-  'Pansexual',
-  'Queer',
-  'Asexual',
-  'Otro',
-]
-
-// Opciones de Intención
-const RELATIONSHIP_INTENTS = [
-  'Citas y romance 💖',
-  'Amistad y comunidad ☕',
-  'Conexión seria 💍',
-  'Charlar y ver qué surge 🌊',
-]
-
-// Intereses disponibles
-const POPULAR_INTERESTS = [
-  'Fotografía',
-  'Café',
-  'Indie Rock',
-  'Arte Moderno',
-  'Plantas',
-  'Yoga',
-  'Ciclismo',
-  'Cine',
-  'Literatura',
-  'Videojuegos',
-  'Mascotas',
-  'Gastronomía',
-  'Viajes',
-  'Música en Vivo',
-]
-
-// Formulario reactivo de Onboarding
+// Formulario reactivo de Onboarding alineado con el contrato del backend
 const form = reactive({
-  name: '',
-  pronouns: 'Ella / She',
-  gender_identity: 'Lesbiana',
-  age: 24,
+  gender_identity: 'TRANS_FEM' as GenderIdentity,
+  birth_date: '2000-01-01',
+  bio: '¡Hola! Acabo de unirme a Fematch. Me encanta conectar con personas afines en la comunidad.',
   city: 'Madrid',
-  occupation: '',
-  relationship_intent: 'Citas y romance 💖',
-  search_preferences: {
-    minAge: 20,
-    maxAge: 35,
-    maxDistanceKm: 30,
-    interestedIn: ['Mujer cis', 'Mujer trans', 'No binaria', 'Lesbiana', 'Bisexual'] as string[],
-  },
+  target_genders: ['FEMBOY', 'TRANS_FEM', 'TRANS_MASC', 'CROSSDRESSER', 'OTHER'] as string[],
+  min_age: 18,
+  max_age: 35,
+  max_distance_km: 30,
   photos: [
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
   ],
-  bio: '¡Hola! Acabo de unirme a Fematch. Me encanta el café, la buena música y conectar con personas auténticas.',
-  interests: ['Fotografía', 'Café', 'Indie Rock', 'Arte Moderno'] as string[],
 })
 
-onMounted(() => {
-  // Pre-cargar nombre desde Telegram si está disponible
-  if (tgStore.user?.first_name) {
-    form.name = `${tgStore.user.first_name} ${tgStore.user.last_name || ''}`.trim()
+// Cálculo reactivo de la edad
+const calculatedAge = computed(() => {
+  if (!form.birth_date) return 0
+  const birth = new Date(form.birth_date)
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const monthDiff = today.getMonth() - birth.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--
   }
+  return age
+})
+
+const isAdult = computed(() => calculatedAge.value >= 18)
+
+onMounted(() => {
   if (tgStore.user?.photo_url) {
     form.photos = [tgStore.user.photo_url]
   }
 })
 
 const progressPercentage = computed(() => {
-  return ((currentStep.value) / totalSteps) * 100
+  return (currentStep.value / totalSteps) * 100
 })
 
 // Validación de cada paso
 const isStepValid = computed(() => {
   if (currentStep.value === 1) {
-    return form.name.trim().length >= 2 && Boolean(form.gender_identity)
+    return Boolean(form.gender_identity)
   }
   if (currentStep.value === 2) {
-    return form.age >= 18 && form.city.trim().length >= 2
+    return Boolean(form.birth_date) && isAdult.value && form.city.trim().length >= 2
   }
   if (currentStep.value === 3) {
-    return form.search_preferences.interestedIn.length >= 1
+    return form.target_genders.length >= 1
   }
   if (currentStep.value === 4) {
-    return form.photos.length >= 1 && form.interests.length >= 2
+    return form.photos.length >= 1
   }
   return true
 })
@@ -143,26 +113,15 @@ function prevStep() {
   }
 }
 
-function toggleInterestedIn(identity: string) {
+function toggleTargetGender(identity: string) {
   haptics.selection()
-  const idx = form.search_preferences.interestedIn.indexOf(identity)
+  const idx = form.target_genders.indexOf(identity)
   if (idx >= 0) {
-    if (form.search_preferences.interestedIn.length > 1) {
-      form.search_preferences.interestedIn.splice(idx, 1)
+    if (form.target_genders.length > 1) {
+      form.target_genders.splice(idx, 1)
     }
   } else {
-    form.search_preferences.interestedIn.push(identity)
-  }
-}
-
-function toggleInterest(interest: string) {
-  haptics.selection()
-  const idx = form.interests.indexOf(interest)
-  if (idx >= 0) {
-    form.interests.splice(idx, 1)
-  } else {
-    if (form.interests.length >= 6) return
-    form.interests.push(interest)
+    form.target_genders.push(identity)
   }
 }
 
@@ -193,7 +152,7 @@ async function onPhotoFileSelected(event: Event) {
   haptics.impact('medium')
 
   try {
-    const newPhotoUrl = await userService.uploadPhoto(file)
+    const newPhotoUrl = await userService.uploadPhoto(file, 0)
     if (newPhotoUrl) {
       form.photos = [newPhotoUrl, ...form.photos.filter((p) => p !== newPhotoUrl)]
       haptics.notification('success')
@@ -212,23 +171,19 @@ async function finishOnboarding() {
   haptics.impact('medium')
 
   try {
-    // Guardar datos y marcar onboardingCompleted = true
+    // Guardar datos mediante POST /api/user/onboarding
     await userStore.completeOnboarding({
-      name: form.name.trim(),
-      pronouns: form.pronouns.trim(),
       gender_identity: form.gender_identity,
-      age: Number(form.age),
-      city: form.city.trim(),
-      occupation: form.occupation.trim(),
-      relationship_intent: form.relationship_intent,
-      search_preferences: { ...form.search_preferences },
-      photos: [...form.photos],
+      birth_date: form.birth_date,
       bio: form.bio.trim(),
-      interests: [...form.interests],
+      city: form.city.trim(),
+      target_genders: [...form.target_genders],
+      min_age: Number(form.min_age),
+      max_age: Number(form.max_age),
+      max_distance_km: Number(form.max_distance_km),
     })
 
     haptics.notification('success')
-    // Redirigir al feed de citas DiscoverView
     router.replace('/discover')
   } catch (error) {
     console.error('Error al completar onboarding:', error)
@@ -306,98 +261,72 @@ async function finishOnboarding() {
             ¿Cómo te identificas?
           </h2>
           <p class="text-xs text-tg-hint leading-relaxed">
-            Fematch es un espacio seguro e inclusivo para conectar con autenticidad.
+            Fematch es un espacio seguro para conectar con autenticidad.
           </p>
         </div>
 
-        <div class="space-y-4">
-          <!-- Nombre -->
-          <div class="space-y-1.5">
-            <label class="text-xs font-bold text-tg-text">¿Cómo quieres que te llamen?</label>
-            <input
-              v-model="form.name"
-              type="text"
-              placeholder="Tu nombre o apodo"
-              class="w-full px-4 py-3 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-sm text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400 font-semibold"
-            />
-          </div>
-
-          <!-- Pronombres -->
-          <div class="space-y-1.5">
-            <label class="text-xs font-bold text-tg-text">Tus pronombres</label>
-            <div class="grid grid-cols-3 gap-2">
-              <button
-                v-for="pr in ['Ella / She', 'Elle / They', 'Ella / Elle']"
-                :key="pr"
-                type="button"
-                @click="form.pronouns = pr"
-                class="py-2 px-2 rounded-xl text-xs font-semibold border transition-all text-center"
-                :class="[
-                  form.pronouns === pr
-                    ? 'border-fematch-pink-500 bg-fematch-pink-50 dark:bg-fematch-violet-950/60 text-fematch-pink-600 dark:text-fematch-pink-300 font-bold'
-                    : 'border-fematch-pink-100 dark:border-fematch-violet-900/40 bg-tg-secondary-bg text-tg-hint'
-                ]"
-              >
-                {{ pr }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Identidad de Género / Orientación -->
-          <div class="space-y-2">
-            <label class="text-xs font-bold text-tg-text flex items-center justify-between">
-              <span>Tu Identidad / Orientación</span>
-              <span class="text-xs text-fematch-pink-500 font-bold">{{ form.gender_identity }}</span>
-            </label>
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="identity in GENDER_IDENTITIES"
-                :key="identity"
-                type="button"
-                @click="form.gender_identity = identity"
-                class="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all"
-                :class="[
-                  form.gender_identity === identity
-                    ? 'bg-gradient-to-r from-fematch-pink-500 to-fematch-violet-500 text-white shadow-pastel-pink scale-[1.02]'
-                    : 'bg-tg-secondary-bg text-tg-text border border-fematch-pink-100 dark:border-fematch-violet-900/40'
-                ]"
-              >
-                {{ identity }}
-              </button>
-            </div>
+        <div class="space-y-3">
+          <label class="text-xs font-bold text-tg-text">Selecciona tu identidad:</label>
+          <div class="grid grid-cols-1 gap-2.5">
+            <button
+              v-for="opt in GENDER_IDENTITY_OPTIONS"
+              :key="opt.value"
+              type="button"
+              @click="form.gender_identity = opt.value"
+              class="p-3.5 rounded-2xl text-xs font-bold border transition-all flex items-center justify-between text-left"
+              :class="[
+                form.gender_identity === opt.value
+                  ? 'border-fematch-pink-500 bg-gradient-to-r from-fematch-pink-500/15 to-fematch-violet-500/15 text-fematch-pink-600 dark:text-fematch-pink-300 shadow-sm'
+                  : 'border-fematch-pink-100 dark:border-fematch-violet-900/40 bg-tg-secondary-bg text-tg-text'
+              ]"
+            >
+              <span class="text-sm font-extrabold">{{ opt.label }}</span>
+              <span v-if="form.gender_identity === opt.value" class="w-5 h-5 rounded-full bg-fematch-pink-500 text-white flex items-center justify-center">
+                <Check class="w-3 h-3 stroke-[3]" />
+              </span>
+            </button>
           </div>
         </div>
       </section>
 
       <!-- ============================================== -->
-      <!-- PASO 2: EDAD Y UBICACIÓN                       -->
+      <!-- PASO 2: FECHA DE NACIMIENTO Y UBICACIÓN        -->
       <!-- ============================================== -->
       <section v-else-if="currentStep === 2" class="space-y-5 animate-fade-in">
         <div>
           <div class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-fematch-violet-50 dark:bg-fematch-violet-950/60 text-fematch-violet-600 dark:text-fematch-violet-300 text-xs font-bold mb-2">
-            <MapPin class="w-3.5 h-3.5" />
+            <Calendar class="w-3.5 h-3.5" />
             <span>Paso 2</span>
           </div>
           <h2 class="text-2xl font-black tracking-tight text-tg-text mb-1">
             Edad y Ubicación
           </h2>
           <p class="text-xs text-tg-hint leading-relaxed">
-            Solo mostramos perfiles de personas mayores de 18 años cercanas a tu zona.
+            Solo mostramos perfiles de personas mayores de 18 años (+18).
           </p>
         </div>
 
         <div class="space-y-4">
-          <!-- Edad -->
+          <!-- Fecha de Nacimiento -->
           <div class="space-y-1.5">
-            <label class="text-xs font-bold text-tg-text">¿Cuál es tu edad?</label>
-            <input
-              v-model="form.age"
-              type="number"
-              min="18"
-              max="99"
-              class="w-full px-4 py-3 rounded-2xl bg-tg-secondary-bg border border-fematch-violet-200 dark:border-fematch-violet-800 text-lg font-black text-tg-text text-center focus:outline-none focus:ring-2 focus:ring-fematch-violet-400"
-            />
-            <span class="text-[10px] text-tg-hint block text-center">Debes ser mayor de 18 años para usar Fematch</span>
+            <label class="text-xs font-bold text-tg-text flex items-center justify-between">
+              <span>Fecha de Nacimiento (YYYY-MM-DD)</span>
+              <span v-if="calculatedAge > 0" class="text-fematch-pink-500 font-extrabold text-xs">
+                {{ calculatedAge }} años
+              </span>
+            </label>
+            <div class="relative">
+              <input
+                v-model="form.birth_date"
+                type="date"
+                max="2008-01-01"
+                min="1940-01-01"
+                class="w-full px-4 py-3 rounded-2xl bg-tg-secondary-bg border border-fematch-violet-200 dark:border-fematch-violet-800 text-sm font-bold text-tg-text text-center focus:outline-none focus:ring-2 focus:ring-fematch-violet-400"
+              />
+            </div>
+            <span v-if="!isAdult" class="text-[11px] text-rose-500 font-bold block text-center">
+              ⚠️ Debes tener al menos 18 años para utilizar Fematch.
+            </span>
           </div>
 
           <!-- Ciudad / Ubicación -->
@@ -412,17 +341,6 @@ async function finishOnboarding() {
                 class="w-full pl-10 pr-4 py-3 rounded-2xl bg-tg-secondary-bg border border-fematch-violet-200 dark:border-fematch-violet-800 text-sm text-tg-text font-semibold focus:outline-none focus:ring-2 focus:ring-fematch-violet-400"
               />
             </div>
-          </div>
-
-          <!-- Ocupación -->
-          <div class="space-y-1.5">
-            <label class="text-xs font-bold text-tg-text">Ocupación / A qué te dedicas (opcional)</label>
-            <input
-              v-model="form.occupation"
-              type="text"
-              placeholder="ej. Arquitecta, Diseñadora, Estudiante..."
-              class="w-full px-4 py-3 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400"
-            />
           </div>
         </div>
       </section>
@@ -440,64 +358,73 @@ async function finishOnboarding() {
             ¿A quién buscas?
           </h2>
           <p class="text-xs text-tg-hint leading-relaxed">
-            Configura las preferencias de tu radar para descubrir personas compatibles.
+            Configura las preferencias de tu radar de afinidad.
           </p>
         </div>
 
         <div class="space-y-4">
-          <!-- Intención de conexión -->
+          <!-- Identidades que desea ver (target_genders) -->
           <div class="space-y-2">
-            <label class="text-xs font-bold text-tg-text">¿Qué buscas en Fematch?</label>
-            <div class="grid grid-cols-2 gap-2">
-              <button
-                v-for="intent in RELATIONSHIP_INTENTS"
-                :key="intent"
-                type="button"
-                @click="form.relationship_intent = intent"
-                class="p-3 rounded-2xl text-xs font-bold border transition-all text-left flex items-center"
-                :class="[
-                  form.relationship_intent === intent
-                    ? 'border-fematch-pink-500 bg-fematch-pink-50/80 dark:bg-fematch-violet-950/60 text-fematch-pink-600 dark:text-fematch-pink-300 shadow-xs'
-                    : 'border-fematch-pink-100 dark:border-fematch-violet-900/40 bg-tg-secondary-bg text-tg-text'
-                ]"
-              >
-                <span>{{ intent }}</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Identidades que desea ver -->
-          <div class="space-y-2">
-            <label class="text-xs font-bold text-tg-text">Interesada en descubrir (Selecciona una o más):</label>
+            <label class="text-xs font-bold text-tg-text">Identidades a descubrir:</label>
             <div class="flex flex-wrap gap-2">
               <button
-                v-for="identity in GENDER_IDENTITIES"
-                :key="identity"
+                v-for="opt in GENDER_IDENTITY_OPTIONS"
+                :key="opt.value"
                 type="button"
-                @click="toggleInterestedIn(identity)"
+                @click="toggleTargetGender(opt.value)"
                 class="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all"
                 :class="[
-                  form.search_preferences.interestedIn.includes(identity)
+                  form.target_genders.includes(opt.value)
                     ? 'bg-gradient-to-r from-fematch-violet-500 to-fematch-cyan-500 text-white shadow-pastel-violet'
                     : 'bg-tg-secondary-bg text-tg-text border border-fematch-pink-100 dark:border-fematch-violet-900/40'
                 ]"
               >
-                {{ identity }}
+                {{ opt.label }}
               </button>
             </div>
           </div>
 
-          <!-- Distancia Máxima -->
+          <!-- Rango de Edad (min_age y max_age) -->
+          <div class="p-3.5 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-200 dark:border-fematch-violet-900/40 space-y-2">
+            <div class="flex items-center justify-between text-xs font-bold">
+              <span>Rango de Edad</span>
+              <span class="text-fematch-pink-500">{{ form.min_age }} - {{ form.max_age }} años</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <span class="text-[10px] text-tg-hint">Edad Mínima</span>
+                <input
+                  v-model.number="form.min_age"
+                  type="number"
+                  min="18"
+                  :max="form.max_age - 1"
+                  class="w-full p-2 text-center rounded-xl bg-tg-bg border border-fematch-pink-200 text-xs font-bold"
+                />
+              </div>
+              <div>
+                <span class="text-[10px] text-tg-hint">Edad Máxima</span>
+                <input
+                  v-model.number="form.max_age"
+                  type="number"
+                  :min="form.min_age + 1"
+                  max="90"
+                  class="w-full p-2 text-center rounded-xl bg-tg-bg border border-fematch-pink-200 text-xs font-bold"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Distancia Máxima (max_distance_km) -->
           <div class="p-3.5 rounded-2xl bg-tg-secondary-bg border border-fematch-cyan-200 dark:border-fematch-cyan-900/40 space-y-2">
             <div class="flex items-center justify-between text-xs">
               <span class="font-bold text-tg-text flex items-center gap-1">
                 <Compass class="w-3.5 h-3.5 text-fematch-cyan-500" />
                 <span>Distancia Máxima</span>
               </span>
-              <span class="font-black text-fematch-cyan-500">Hasta {{ form.search_preferences.maxDistanceKm }} km</span>
+              <span class="font-black text-fematch-cyan-500">Hasta {{ form.max_distance_km }} km</span>
             </div>
             <input
-              v-model="form.search_preferences.maxDistanceKm"
+              v-model.number="form.max_distance_km"
               type="range"
               min="5"
               max="100"
@@ -508,7 +435,7 @@ async function finishOnboarding() {
       </section>
 
       <!-- ============================================== -->
-      <!-- PASO 4: FOTO DE PORTADA E INTERESES           -->
+      <!-- PASO 4: FOTO DE PORTADA Y BIO                 -->
       <!-- ============================================== -->
       <section v-else-if="currentStep === 4" class="space-y-5 animate-fade-in">
         <div>
@@ -517,10 +444,10 @@ async function finishOnboarding() {
             <span>Paso Final</span>
           </div>
           <h2 class="text-2xl font-black tracking-tight text-tg-text mb-1">
-            Foto de Portada
+            Foto de Portada y Bio
           </h2>
           <p class="text-xs text-tg-hint leading-relaxed">
-            Tu foto principal es la primera impresión que verán las demás chicas.
+            Tu foto principal y biografía para empezar a descubrir conexiones.
           </p>
         </div>
 
@@ -574,34 +501,10 @@ async function finishOnboarding() {
             <textarea
               v-model="form.bio"
               maxlength="300"
-              rows="2"
+              rows="3"
               placeholder="Cuéntanos un poco sobre ti..."
               class="w-full p-3 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400 leading-relaxed resize-none"
             />
-          </div>
-
-          <!-- Intereses favoritos -->
-          <div class="space-y-2">
-            <label class="text-xs font-bold text-tg-text flex items-center justify-between">
-              <span>Elige tus intereses (mínimo 2):</span>
-              <span class="text-xs text-fematch-violet-500 font-bold">{{ form.interests.length }}/6</span>
-            </label>
-            <div class="flex flex-wrap gap-1.5">
-              <button
-                v-for="interest in POPULAR_INTERESTS"
-                :key="interest"
-                type="button"
-                @click="toggleInterest(interest)"
-                class="px-3 py-1 rounded-full text-xs font-semibold transition-all"
-                :class="[
-                  form.interests.includes(interest)
-                    ? 'bg-gradient-to-r from-fematch-pink-500 to-fematch-violet-500 text-white shadow-pastel-pink'
-                    : 'bg-tg-secondary-bg text-tg-hint border border-fematch-pink-100 dark:border-fematch-violet-900/40 hover:text-tg-text'
-                ]"
-              >
-                {{ interest }}
-              </button>
-            </div>
           </div>
         </div>
       </section>

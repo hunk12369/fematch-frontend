@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
-import type { UserProfile } from '@/api/types'
+import { ref, reactive, watch, computed } from 'vue'
+import type { User, UserPhoto, GenderIdentity } from '@/api/types'
+import { GENDER_IDENTITY_OPTIONS } from '@/api/types'
 import { userService } from '@/api/services/user.service'
 import { useHaptics } from '@/composables/useHaptics'
 import {
@@ -9,9 +10,8 @@ import {
   Trash2,
   ArrowLeft,
   ArrowRight,
-  Sparkles,
   Sliders,
-  User,
+  User as UserIcon,
   Heart,
   Save,
   Loader2,
@@ -24,12 +24,12 @@ import {
 
 const props = defineProps<{
   isOpen: boolean
-  profile: UserProfile | null
+  profile: User | null
 }>()
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'saved', updatedProfile: UserProfile): void
+  (e: 'saved', updatedProfile: User): void
 }>()
 
 const haptics = useHaptics()
@@ -41,80 +41,50 @@ const activeTab = ref<'profile' | 'preferences'>('profile')
 // Referencia al selector nativo de archivos oculto
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
-// Lista predefinida de identidades para la comunidad Fematch
-const GENDER_IDENTITIES = [
-  'Mujer cis',
-  'Mujer trans',
-  'No binaria',
-  'Lesbiana',
-  'Bisexual',
-  'Pansexual',
-  'Queer',
-  'Asexual',
-  'Otro',
-]
-
-// Lista de etiquetas de intereses disponibles
-const AVAILABLE_INTERESTS = [
-  'Fotografía',
-  'Indie Rock',
-  'Diseño UI',
-  'Café',
-  'Viajes',
-  'Arte Moderno',
-  'Plantas',
-  'Yoga',
-  'Ciclismo',
-  'Cine',
-  'Literatura',
-  'Videojuegos',
-  'Mascotas',
-  'Música en Vivo',
-  'Gastronomía',
-  'Senderismo',
-  'Tatuajes',
-  'Moda Vintage',
-]
-
-// Formulario reactivo local
+// Formulario reactivo local adaptado al esquema de Prisma
 const form = reactive({
-  name: '',
-  age: 26,
+  gender_identity: 'TRANS_FEM' as GenderIdentity,
+  birth_date: '2000-01-01',
   bio: '',
-  gender_identity: 'Lesbiana',
-  pronouns: 'Ella / She',
-  occupation: '',
-  photos: [] as string[],
-  interests: [] as string[],
-  search_preferences: {
-    minAge: 20,
-    maxAge: 38,
-    maxDistanceKm: 35,
-    interestedIn: ['Mujer cis', 'Mujer trans', 'No binaria', 'Lesbiana', 'Bisexual'] as string[],
-  },
+  city: 'Madrid',
+  photos: [] as UserPhoto[],
+  target_genders: ['FEMBOY', 'TRANS_FEM', 'TRANS_MASC', 'CROSSDRESSER', 'OTHER'] as string[],
+  min_age: 18,
+  max_age: 35,
+  max_distance_km: 30,
 })
+
+// Cálculo reactivo de la edad
+const calculatedAge = computed(() => {
+  if (!form.birth_date) return 0
+  const birth = new Date(form.birth_date)
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const monthDiff = today.getMonth() - birth.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--
+  }
+  return age
+})
+
+const isAdult = computed(() => calculatedAge.value >= 18)
 
 // Sincronizar datos cuando se abre el modal
 watch(
   () => props.profile,
   (p) => {
     if (p) {
-      form.name = p.name || ''
-      form.age = p.age || 26
+      form.gender_identity = (p.genderIdentity as GenderIdentity) || 'TRANS_FEM'
+      form.birth_date = p.birthDate || '2000-01-01'
       form.bio = p.bio || ''
-      form.gender_identity = p.gender_identity || 'Lesbiana'
-      form.pronouns = p.pronouns || 'Ella / She'
-      form.occupation = p.occupation || ''
+      form.city = p.city || 'Madrid'
       form.photos = p.photos ? [...p.photos] : []
-      form.interests = p.interests ? [...p.interests] : []
-      form.search_preferences = {
-        minAge: p.search_preferences?.minAge || 20,
-        maxAge: p.search_preferences?.maxAge || 38,
-        maxDistanceKm: p.search_preferences?.maxDistanceKm || 35,
-        interestedIn: p.search_preferences?.interestedIn
-          ? [...p.search_preferences.interestedIn]
-          : ['Mujer cis', 'Mujer trans', 'No binaria', 'Lesbiana', 'Bisexual'],
-      }
+      form.target_genders = p.preference?.targetGenders
+        ? [...p.preference.targetGenders]
+        : ['FEMBOY', 'TRANS_FEM', 'TRANS_MASC', 'CROSSDRESSER', 'OTHER']
+      form.min_age = p.preference?.minAge || 18
+      form.max_age = p.preference?.maxAge || 35
+      form.max_distance_km = p.preference?.maxDistanceKm || 30
       uploadErrorMessage.value = null
     }
   },
@@ -136,7 +106,7 @@ async function onFileSelected(event: Event) {
   if (!file) return
 
   // 1. Validación de tamaño en cliente (< 5MB)
-  const MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5 Megabytes
+  const MAX_SIZE_BYTES = 5 * 1024 * 1024
   if (file.size > MAX_SIZE_BYTES) {
     const sizeInMb = (file.size / (1024 * 1024)).toFixed(1)
     uploadErrorMessage.value = `El archivo (${sizeInMb}MB) excede el tamaño máximo permitido de 5MB.`
@@ -158,12 +128,15 @@ async function onFileSelected(event: Event) {
   haptics.impact('medium')
 
   try {
-    // 3. Subir archivo a través de userService.uploadPhoto (POST a /api/user/photos vía apiClient)
-    const newPhotoUrl = await userService.uploadPhoto(file)
+    const nextOrder = form.photos.length
+    const newPhotoUrl = await userService.uploadPhoto(file, nextOrder)
 
-    // 4. Actualización reactiva inmediata sin recargar
-    if (newPhotoUrl && !form.photos.includes(newPhotoUrl)) {
-      form.photos.push(newPhotoUrl)
+    if (newPhotoUrl && !form.photos.some((p) => p.url === newPhotoUrl)) {
+      form.photos.push({
+        id: `photo_${Date.now()}`,
+        url: newPhotoUrl,
+        orderIndex: nextOrder,
+      })
       haptics.notification('success')
     }
   } catch (error: any) {
@@ -176,12 +149,17 @@ async function onFileSelected(event: Event) {
   }
 }
 
-function removePhoto(index: number) {
+async function removePhoto(index: number) {
   if (form.photos.length <= 1) {
     alert('Debes mantener al menos 1 foto principal en tu perfil.')
     return
   }
+  const photo = form.photos[index]
   haptics.impact('medium')
+
+  if (photo?.id) {
+    await userService.deletePhoto(photo.id)
+  }
   form.photos.splice(index, 1)
 }
 
@@ -194,40 +172,25 @@ function movePhoto(index: number, direction: 'left' | 'right') {
   form.photos[targetIndex] = temp
 }
 
-// Toggle de intereses
-function toggleInterest(interest: string) {
-  haptics.selection()
-  const idx = form.interests.indexOf(interest)
-  if (idx >= 0) {
-    form.interests.splice(idx, 1)
-  } else {
-    if (form.interests.length >= 8) {
-      alert('Puedes seleccionar un máximo de 8 intereses.')
-      return
-    }
-    form.interests.push(interest)
-  }
-}
-
 // Toggle de identidades deseadas en preferencias
-function toggleInterestedIn(identity: string) {
+function toggleTargetGender(identity: string) {
   haptics.selection()
-  const idx = form.search_preferences.interestedIn.indexOf(identity)
+  const idx = form.target_genders.indexOf(identity)
   if (idx >= 0) {
-    if (form.search_preferences.interestedIn.length <= 1) {
+    if (form.target_genders.length <= 1) {
       alert('Debes seleccionar al menos una identidad de búsqueda.')
       return
     }
-    form.search_preferences.interestedIn.splice(idx, 1)
+    form.target_genders.splice(idx, 1)
   } else {
-    form.search_preferences.interestedIn.push(identity)
+    form.target_genders.push(identity)
   }
 }
 
-// Guardar cambios del perfil
+// Guardar cambios del perfil vía POST /api/user/onboarding
 async function onSave() {
-  if (!form.name.trim()) {
-    alert('Por favor ingresa tu nombre.')
+  if (!form.birth_date || !isAdult.value) {
+    alert('Debes ingresar una fecha de nacimiento válida (mayor de 18 años).')
     return
   }
   if (form.photos.length === 0) {
@@ -239,23 +202,22 @@ async function onSave() {
   haptics.impact('medium')
 
   try {
-    const updated = await userService.updateProfile({
-      name: form.name.trim(),
-      age: Number(form.age),
-      bio: form.bio.trim(),
+    const updated = await userService.saveOnboarding({
       gender_identity: form.gender_identity,
-      pronouns: form.pronouns.trim(),
-      occupation: form.occupation.trim(),
-      photos: [...form.photos],
-      interests: [...form.interests],
-      search_preferences: { ...form.search_preferences },
+      birth_date: form.birth_date,
+      bio: form.bio.trim(),
+      city: form.city.trim(),
+      target_genders: [...form.target_genders],
+      min_age: Number(form.min_age),
+      max_age: Number(form.max_age),
+      max_distance_km: Number(form.max_distance_km),
     })
 
     haptics.notification('success')
     emit('saved', updated)
     emit('close')
   } catch (error) {
-    console.error('Error saving profile:', error)
+    console.error('Error al guardar perfil:', error)
     haptics.notification('error')
     alert('Hubo un error al guardar los cambios. Intenta nuevamente.')
   } finally {
@@ -298,7 +260,7 @@ async function onSave() {
 
         <button
           type="button"
-          :disabled="isSaving || isUploadingPhoto"
+          :disabled="isSaving || isUploadingPhoto || !isAdult"
           @click="onSave"
           class="px-4 py-1.5 rounded-full bg-gradient-to-r from-fematch-pink-500 to-fematch-violet-500 text-white font-bold text-xs shadow-pastel-pink active:scale-95 transition-transform flex items-center gap-1.5 disabled:opacity-50"
         >
@@ -320,7 +282,7 @@ async function onSave() {
               : 'text-tg-hint hover:text-tg-text'
           ]"
         >
-          <User class="w-3.5 h-3.5" />
+          <UserIcon class="w-3.5 h-3.5" />
           <span>Mi Perfil</span>
         </button>
 
@@ -376,10 +338,10 @@ async function onSave() {
             <div class="grid grid-cols-3 gap-2.5 relative">
               <div
                 v-for="(photo, idx) in form.photos"
-                :key="`photo-${idx}`"
+                :key="photo.id || `photo-${idx}`"
                 class="relative aspect-[3/4] rounded-2xl overflow-hidden border-2 border-fematch-pink-300 dark:border-fematch-violet-700 bg-neutral-900 group shadow-sm"
               >
-                <img :src="photo" class="w-full h-full object-cover" />
+                <img :src="photo.url" class="w-full h-full object-cover" />
 
                 <!-- Badge Principal -->
                 <span
@@ -447,70 +409,56 @@ async function onSave() {
 
           <!-- 2. Información General -->
           <section class="space-y-3">
-            <div class="grid grid-cols-3 gap-2">
-              <div class="col-span-2 space-y-1">
-                <label class="text-[11px] font-bold text-tg-hint">Nombre</label>
-                <input
-                  v-model="form.name"
-                  type="text"
-                  class="w-full px-3.5 py-2.5 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400 font-semibold"
-                />
-              </div>
-
-              <div class="space-y-1">
-                <label class="text-[11px] font-bold text-tg-hint">Edad</label>
-                <input
-                  v-model="form.age"
-                  type="number"
-                  min="18"
-                  max="99"
-                  class="w-full px-3.5 py-2.5 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400 font-semibold text-center"
-                />
-              </div>
+            <!-- Fecha de Nacimiento -->
+            <div class="space-y-1">
+              <label class="text-[11px] font-bold text-tg-hint flex items-center justify-between">
+                <span>Fecha de Nacimiento (YYYY-MM-DD)</span>
+                <span v-if="calculatedAge > 0" class="text-fematch-pink-500 font-bold text-xs">
+                  {{ calculatedAge }} años
+                </span>
+              </label>
+              <input
+                v-model="form.birth_date"
+                type="date"
+                max="2008-01-01"
+                min="1940-01-01"
+                class="w-full px-3.5 py-2.5 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text font-bold text-center focus:outline-none focus:ring-2 focus:ring-fematch-pink-400"
+              />
+              <span v-if="!isAdult" class="text-[10px] text-rose-500 font-semibold block text-center">
+                ⚠️ Debes ser mayor de 18 años (+18)
+              </span>
             </div>
 
-            <div class="grid grid-cols-2 gap-2">
-              <div class="space-y-1">
-                <label class="text-[11px] font-bold text-tg-hint">Pronombres</label>
-                <input
-                  v-model="form.pronouns"
-                  type="text"
-                  placeholder="ej. Ella / She"
-                  class="w-full px-3.5 py-2.5 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400"
-                />
-              </div>
-
-              <div class="space-y-1">
-                <label class="text-[11px] font-bold text-tg-hint">Ocupación / Pasión</label>
-                <input
-                  v-model="form.occupation"
-                  type="text"
-                  placeholder="ej. Diseñadora & Melómana"
-                  class="w-full px-3.5 py-2.5 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400"
-                />
-              </div>
+            <!-- Ciudad -->
+            <div class="space-y-1">
+              <label class="text-[11px] font-bold text-tg-hint">Ciudad actual</label>
+              <input
+                v-model="form.city"
+                type="text"
+                placeholder="ej. Madrid, Barcelona..."
+                class="w-full px-3.5 py-2.5 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400 font-semibold"
+              />
             </div>
 
-            <!-- Identidad de Género / Rol -->
+            <!-- Identidad de Género (Enum) -->
             <div class="space-y-1.5">
               <label class="text-[11px] font-bold text-tg-hint flex items-center justify-between">
                 <span>Mi Identidad de Género</span>
-                <span class="text-fematch-pink-500 font-bold">{{ form.gender_identity }}</span>
               </label>
-              <div class="flex flex-wrap gap-1.5">
+              <div class="grid grid-cols-2 gap-1.5">
                 <button
-                  v-for="identity in GENDER_IDENTITIES"
-                  :key="identity"
+                  v-for="opt in GENDER_IDENTITY_OPTIONS"
+                  :key="opt.value"
                   type="button"
-                  @click="form.gender_identity = identity"
-                  class="px-3 py-1 rounded-full text-xs font-semibold transition-all"
+                  @click="form.gender_identity = opt.value"
+                  class="px-3 py-2 rounded-xl text-xs font-semibold transition-all text-center"
                   :class="[
-                    form.gender_identity === identity
-                      ? 'bg-gradient-to-r from-fematch-pink-500 to-fematch-violet-500 text-white shadow-pastel-pink scale-[1.02]'
+                    form.gender_identity === opt.value
+                      ? 'bg-gradient-to-r from-fematch-pink-500 to-fematch-violet-500 text-white shadow-pastel-pink font-bold'
                       : 'bg-tg-secondary-bg text-tg-text border border-fematch-pink-100 dark:border-fematch-violet-900/40'
                   ]"
                 >
-                  {{ identity }}
+                  {{ opt.label }}
                 </button>
               </div>
             </div>
@@ -519,42 +467,15 @@ async function onSave() {
             <div class="space-y-1">
               <div class="flex items-center justify-between">
                 <label class="text-[11px] font-bold text-tg-hint">Sobre Mí (Bio)</label>
-                <span class="text-[10px] text-tg-hint">{{ form.bio.length }}/500</span>
+                <span class="text-[10px] text-tg-hint">{{ form.bio.length }}/300</span>
               </div>
               <textarea
                 v-model="form.bio"
-                maxlength="500"
+                maxlength="300"
                 rows="3"
-                placeholder="Cuéntanos un poco sobre ti, lo que te inspira y lo que buscas en Fematch..."
+                placeholder="Cuéntanos un poco sobre ti, lo que te apasiona y lo que buscas..."
                 class="w-full p-3.5 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400 leading-relaxed resize-none"
               />
-            </div>
-          </section>
-
-          <!-- 3. Intereses -->
-          <section class="space-y-2">
-            <div class="flex items-center justify-between">
-              <label class="text-xs font-bold uppercase tracking-wider text-fematch-violet-600 dark:text-fematch-violet-400 flex items-center gap-1.5">
-                <Sparkles class="w-3.5 h-3.5" />
-                <span>Mis Intereses ({{ form.interests.length }}/8)</span>
-              </label>
-            </div>
-
-            <div class="flex flex-wrap gap-1.5">
-              <button
-                v-for="interest in AVAILABLE_INTERESTS"
-                :key="interest"
-                type="button"
-                @click="toggleInterest(interest)"
-                class="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all"
-                :class="[
-                  form.interests.includes(interest)
-                    ? 'bg-gradient-to-r from-fematch-pink-500 to-fematch-violet-500 text-white shadow-pastel-pink'
-                    : 'bg-tg-secondary-bg text-tg-hint border border-fematch-pink-100 dark:border-fematch-violet-900/40 hover:text-tg-text'
-                ]"
-              >
-                {{ interest }}
-              </button>
             </div>
           </section>
         </div>
@@ -571,12 +492,12 @@ async function onSave() {
                 <span>Distancia Máxima</span>
               </label>
               <span class="text-xs font-extrabold text-fematch-cyan-500 bg-fematch-cyan-500/10 px-2 py-0.5 rounded-full">
-                Hasta {{ form.search_preferences.maxDistanceKm }} km
+                Hasta {{ form.max_distance_km }} km
               </span>
             </div>
 
             <input
-              v-model="form.search_preferences.maxDistanceKm"
+              v-model.number="form.max_distance_km"
               type="range"
               min="2"
               max="100"
@@ -597,7 +518,7 @@ async function onSave() {
                 <span>Rango de Edad</span>
               </label>
               <span class="text-xs font-extrabold text-fematch-pink-500 bg-fematch-pink-500/10 px-2 py-0.5 rounded-full">
-                {{ form.search_preferences.minAge }} - {{ form.search_preferences.maxAge }} años
+                {{ form.min_age }} - {{ form.max_age }} años
               </span>
             </div>
 
@@ -605,10 +526,10 @@ async function onSave() {
               <div class="space-y-1">
                 <span class="text-[10px] text-tg-hint">Edad Mínima</span>
                 <input
-                  v-model="form.search_preferences.minAge"
+                  v-model.number="form.min_age"
                   type="number"
                   min="18"
-                  :max="form.search_preferences.maxAge - 1"
+                  :max="form.max_age - 1"
                   class="w-full px-3 py-2 rounded-xl bg-tg-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs font-bold text-center"
                 />
               </div>
@@ -616,9 +537,9 @@ async function onSave() {
               <div class="space-y-1">
                 <span class="text-[10px] text-tg-hint">Edad Máxima</span>
                 <input
-                  v-model="form.search_preferences.maxAge"
+                  v-model.number="form.max_age"
                   type="number"
-                  :min="form.search_preferences.minAge + 1"
+                  :min="form.min_age + 1"
                   max="90"
                   class="w-full px-3 py-2 rounded-xl bg-tg-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs font-bold text-center"
                 />
@@ -626,7 +547,7 @@ async function onSave() {
             </div>
           </div>
 
-          <!-- 3. Interesada en Conectar con -->
+          <!-- 3. Interesada en Conectar con (target_genders) -->
           <div class="p-4 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 space-y-3">
             <label class="text-xs font-bold text-tg-text flex items-center gap-1.5">
               <Heart class="w-4 h-4 text-fematch-violet-500" />
@@ -638,18 +559,18 @@ async function onSave() {
 
             <div class="flex flex-wrap gap-1.5">
               <button
-                v-for="identity in GENDER_IDENTITIES"
-                :key="identity"
+                v-for="opt in GENDER_IDENTITY_OPTIONS"
+                :key="opt.value"
                 type="button"
-                @click="toggleInterestedIn(identity)"
+                @click="toggleTargetGender(opt.value)"
                 class="px-3 py-1 rounded-full text-xs font-semibold transition-all"
                 :class="[
-                  form.search_preferences.interestedIn.includes(identity)
+                  form.target_genders.includes(opt.value)
                     ? 'bg-gradient-to-r from-fematch-violet-500 to-fematch-cyan-500 text-white shadow-pastel-violet'
                     : 'bg-tg-bg text-tg-hint border border-fematch-pink-100 dark:border-fematch-violet-900/40 hover:text-tg-text'
                 ]"
               >
-                {{ identity }}
+                {{ opt.label }}
               </button>
             </div>
           </div>
