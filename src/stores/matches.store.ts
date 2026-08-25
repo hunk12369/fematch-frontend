@@ -7,13 +7,16 @@ import { useHaptics } from '@/composables/useHaptics'
 export const useMatchesStore = defineStore('matches', () => {
   const haptics = useHaptics()
   const candidates = ref<MatchCandidate[]>([])
-  const matches = ref<any[]>([])
+  const matches = ref<MatchCandidate[]>([])
   const currentIndex = ref(0)
   const currentPage = ref(1)
   const isLoading = ref(false)
   const lastMatch = ref<MatchCandidate | null>(null)
   const isMatchModalOpen = ref(false)
 
+  /**
+   * Carga el feed de citas desde el backend real usando matchService.getFeed()
+   */
   async function loadDiscoveryFeed(reset = false) {
     if (reset) {
       currentPage.value = 1
@@ -22,7 +25,7 @@ export const useMatchesStore = defineStore('matches', () => {
     }
     isLoading.value = true
     try {
-      const newProfiles = await matchService.getDiscoveryFeed(currentPage.value, 20)
+      const newProfiles = await matchService.getFeed(currentPage.value, 20)
       if (reset || candidates.value.length === 0) {
         candidates.value = newProfiles
         currentIndex.value = 0
@@ -32,7 +35,7 @@ export const useMatchesStore = defineStore('matches', () => {
         candidates.value.push(...unique)
       }
     } catch (error) {
-      console.error('Error loading discovery feed:', error)
+      console.error('Error al cargar feed de citas del backend:', error)
     } finally {
       isLoading.value = false
     }
@@ -42,7 +45,7 @@ export const useMatchesStore = defineStore('matches', () => {
     try {
       matches.value = await matchService.getMatches()
     } catch (error) {
-      console.error('Error loading matches:', error)
+      console.error('Error al cargar matches del backend:', error)
     }
   }
 
@@ -72,7 +75,7 @@ export const useMatchesStore = defineStore('matches', () => {
       currentIndex.value++
 
       // Cargar más perfiles si se acerca al final de la pila
-      if (currentIndex.value >= candidates.value.length - 3 && !isLoading.value) {
+      if (currentIndex.value >= candidates.value.length - 3 && !isLoading.value && candidates.value.length > 0) {
         currentPage.value++
         loadDiscoveryFeed(false)
       }

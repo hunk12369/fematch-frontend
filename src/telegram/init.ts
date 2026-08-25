@@ -20,10 +20,79 @@ export interface TMAInitResult {
 }
 
 /**
+ * Comprueba si la aplicación se está ejecutando en entorno de desarrollo local (localhost / 127.0.0.1)
+ */
+export function isLocalhost(): boolean {
+  if (typeof window === 'undefined') return false
+  const host = window.location.hostname
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '0.0.0.0' ||
+    host.endsWith('.localhost') ||
+    host === '[::1]'
+  )
+}
+
+/**
+ * Extrae el initData de Telegram desde:
+ * 1. window.Telegram.WebApp.initData
+ * 2. Hash de URL (#tgWebAppData=... o #tgWebAppInitData=...)
+ * 3. Search query (?tgWebAppData=... o ?tgWebAppInitData=...)
+ * 
+ * Si no estamos en localhost, desactiva cualquier dato mock estático.
+ */
+export function extractTelegramInitData(): string {
+  if (typeof window === 'undefined') return ''
+
+  // 1. Objeto nativo Telegram WebApp
+  const webAppInitData = window.Telegram?.WebApp?.initData
+  if (webAppInitData && typeof webAppInitData === 'string' && webAppInitData.trim().length > 0) {
+    if (!webAppInitData.includes('mock_fematch') || isLocalhost()) {
+      return webAppInitData.trim()
+    }
+  }
+
+  // 2. Extraer de Hash de URL (#tgWebAppData=... o #tgWebAppInitData=...)
+  const hash = window.location.hash || ''
+  if (hash) {
+    const hashClean = hash.startsWith('#') ? hash.slice(1) : hash
+    const params = new URLSearchParams(hashClean)
+    const tgWebAppData = params.get('tgWebAppData') || params.get('tgWebAppInitData')
+    if (tgWebAppData && tgWebAppData.trim().length > 0) {
+      return decodeURIComponent(tgWebAppData.trim())
+    }
+  }
+
+  // 3. Extraer de Query Parameters (?tgWebAppData=... o ?tgWebAppInitData=...)
+  const search = window.location.search || ''
+  if (search) {
+    const searchClean = search.startsWith('?') ? search.slice(1) : search
+    const params = new URLSearchParams(searchClean)
+    const tgWebAppData = params.get('tgWebAppData') || params.get('tgWebAppInitData')
+    if (tgWebAppData && tgWebAppData.trim().length > 0) {
+      return decodeURIComponent(tgWebAppData.trim())
+    }
+  }
+
+  // 4. Solo usar mock estático si estamos explícitamente en localhost y con la variable activada
+  if (isLocalhost() && import.meta.env.VITE_ENABLE_DEV_TMA_MOCK === 'true') {
+    return window.Telegram?.WebApp?.initData || ''
+  }
+
+  return ''
+}
+
+/**
  * Comprueba si la aplicación se está ejecutando dentro de un entorno Telegram real
  */
 export function isInsideTelegramApp(): boolean {
   if (typeof window === 'undefined') return false
+
+  const rawInitData = extractTelegramInitData()
+  if (rawInitData && !rawInitData.includes('mock_fematch')) {
+    return true
+  }
 
   const webApp = window.Telegram?.WebApp
   if (
@@ -32,13 +101,6 @@ export function isInsideTelegramApp(): boolean {
     webApp.initData.length > 0 &&
     !webApp.initData.includes('mock_fematch')
   ) {
-    return true
-  }
-
-  // Comprobar si existen parámetros de lanzamiento nativos de Telegram en hash o search
-  const hash = window.location.hash || ''
-  const search = window.location.search || ''
-  if (hash.includes('tgWebAppData') || search.includes('tgWebAppData')) {
     return true
   }
 
@@ -51,19 +113,20 @@ export function isInsideTelegramApp(): boolean {
 export async function initializeTelegramApp(): Promise<TMAInitResult> {
   if (isInitialized) {
     const webApp = window.Telegram?.WebApp
+    const initDataRaw = extractTelegramInitData()
     return {
       isInsideTelegram: isInsideTelegramApp(),
       user: webApp?.initDataUnsafe?.user || null,
-      initDataRaw: webApp?.initData || '',
+      initDataRaw,
       colorScheme: webApp?.colorScheme || 'light',
     }
   }
 
-  const isDev = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_TMA_MOCK === 'true'
   const inTelegram = isInsideTelegramApp()
+  const allowMock = isLocalhost() && import.meta.env.VITE_ENABLE_DEV_TMA_MOCK === 'true'
 
-  // Si estamos en entorno local o fuera de Telegram y el mock está activo, inyectamos el mock
-  if (!inTelegram && isDev) {
+  // Solo inyectar mock si NO estamos dentro de Telegram y estamos en localhost
+  if (!inTelegram && allowMock) {
     setupTelegramMock()
   }
 
@@ -133,14 +196,15 @@ export async function initializeTelegramApp(): Promise<TMAInitResult> {
   isInitialized = true
 
   const user = webApp?.initDataUnsafe?.user || null
-  const initDataRaw = webApp?.initData || ''
+  const initDataRaw = extractTelegramInitData()
   const colorScheme = webApp?.colorScheme || 'light'
 
-  console.log('🚀 [Fematch TMA] Mini App Inicializada con éxito:', {
-    user: user ? `${user.first_name} (@${user.username || 'sin_alias'})` : 'Anónimo / Dev',
+  console.log('🚀 [Fematch TMA] Mini App Inicializada:', {
+    user: user ? `${user.first_name} (@${user.username || 'sin_alias'})` : 'Anónimo',
     colorScheme,
     hasInitData: Boolean(initDataRaw),
-    platform: webApp?.platform || 'browser',
+    isInsideTelegram: inTelegram,
+    isLocalhost: isLocalhost(),
   })
 
   return {
@@ -155,6 +219,5 @@ export async function initializeTelegramApp(): Promise<TMAInitResult> {
  * Obtiene el initData raw actual para las peticiones de autenticación
  */
 export function getTelegramInitData(): string {
-  if (typeof window === 'undefined') return ''
-  return window.Telegram?.WebApp?.initData || ''
+  return extractTelegramInitData()
 }

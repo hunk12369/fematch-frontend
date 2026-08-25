@@ -56,7 +56,10 @@ export interface UserProfile {
 }
 
 export interface MatchCandidate extends UserProfile {
-  compatibilityScore: number
+  compatibilityScore?: number
+  lastMessage?: string
+  lastMessageTime?: string
+  unreadCount?: number
 }
 
 export interface MatchInteraction {

@@ -5,7 +5,7 @@ import { useMatchesStore } from '@/stores/matches.store'
 import { useHaptics } from '@/composables/useHaptics'
 import MatchCard from './MatchCard.vue'
 import MatchModal from './MatchModal.vue'
-import { RefreshCw, HeartHandshake, Sparkles } from 'lucide-vue-next'
+import { RefreshCw, HeartHandshake, Sparkles, Loader2, Sliders } from 'lucide-vue-next'
 
 const props = withDefaults(
   defineProps<{
@@ -21,6 +21,7 @@ const emit = defineEmits<{
   (e: 'swipe', action: 'like' | 'pass' | 'superlike', candidate: MatchCandidate): void
   (e: 'match', candidate: MatchCandidate): void
   (e: 'empty'): void
+  (e: 'open-filters'): void
 }>()
 
 const matchesStore = useMatchesStore()
@@ -37,6 +38,7 @@ const activeCandidates = computed(() => {
 })
 
 const currentIndex = computed(() => matchesStore.currentIndex)
+const isLoading = computed(() => matchesStore.isLoading)
 
 // Obtener la sub-pila de tarjetas visibles (máximo 3)
 const visibleCards = computed(() => {
@@ -86,7 +88,7 @@ function swipeTopCard(action: 'like' | 'pass' | 'superlike') {
 
 function reloadDeck() {
   haptics.impact('light')
-  matchesStore.loadDiscoveryFeed()
+  matchesStore.loadDiscoveryFeed(true)
 }
 
 defineExpose({
@@ -97,9 +99,21 @@ defineExpose({
 
 <template>
   <div class="relative w-full h-full flex flex-col justify-center items-center">
+    <!-- Estado de Carga (Spinner animado mientras consulta /api/feed) -->
+    <div
+      v-if="isLoading && !hasCards"
+      class="w-full max-w-sm h-[68vh] max-h-[600px] rounded-3xl bg-tg-secondary-bg border border-fematch-pink-200/60 dark:border-fematch-violet-900/60 flex flex-col items-center justify-center gap-3 p-6 text-center shadow-pastel-pink animate-pulse"
+    >
+      <div class="w-16 h-16 rounded-full bg-gradient-to-tr from-fematch-pink-500 to-fematch-violet-500 flex items-center justify-center text-white shadow-pastel-pink">
+        <Loader2 class="w-8 h-8 animate-spin" />
+      </div>
+      <span class="text-sm font-bold text-tg-text">Buscando perfiles afines...</span>
+      <span class="text-xs text-tg-hint">Sintonizando tu radar de Fematch</span>
+    </div>
+
     <!-- Pila de Tarjetas Interactivas (Stack Deck) -->
     <div
-      v-if="hasCards"
+      v-else-if="hasCards"
       class="relative w-full max-w-sm h-[68vh] max-h-[600px] perspective-1000"
     >
       <!-- Renderizar tarjetas en orden inverso para que la superior quede encima en el DOM -->
@@ -114,7 +128,7 @@ defineExpose({
       />
     </div>
 
-    <!-- Empty State cuando se han agotado los perfiles -->
+    <!-- Empty State cuando no hay perfiles devueltos por el backend -->
     <div
       v-else
       class="w-full max-w-sm p-8 rounded-3xl bg-tg-secondary-bg border border-fematch-pink-200 dark:border-fematch-violet-900/60 text-center flex flex-col items-center gap-4 shadow-sm animate-fade-in"
@@ -131,21 +145,32 @@ defineExpose({
           <span>Fematch Radar</span>
         </div>
         <h3 class="text-lg font-extrabold text-tg-text mb-1">
-          ¡Estás al día!
+          No hay perfiles cerca por ahora
         </h3>
         <p class="text-xs text-tg-hint leading-relaxed">
-          Has explorado todos los perfiles disponibles en tu área. Nuevas personas se unen a Fematch constantemente.
+          Has explorado todos los perfiles disponibles en tu área con tus filtros actuales. Intenta ampliar el radio de distancia o tus preferencias.
         </p>
       </div>
 
-      <button
-        type="button"
-        @click="reloadDeck"
-        class="mt-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-500 text-white font-bold text-xs shadow-pastel-pink active:scale-95 transition-transform flex items-center gap-2"
-      >
-        <RefreshCw class="w-3.5 h-3.5" />
-        <span>Explorar Nuevamente</span>
-      </button>
+      <div class="flex flex-col w-full gap-2 mt-2">
+        <button
+          type="button"
+          @click="reloadDeck"
+          class="w-full py-3 px-6 rounded-2xl bg-gradient-to-r from-fematch-pink-500 via-fematch-violet-500 to-fematch-cyan-500 text-white font-bold text-xs shadow-pastel-pink active:scale-95 transition-transform flex items-center justify-center gap-2"
+        >
+          <RefreshCw class="w-3.5 h-3.5" />
+          <span>Actualizar Radar</span>
+        </button>
+
+        <button
+          type="button"
+          @click="emit('open-filters')"
+          class="w-full py-2.5 px-4 rounded-2xl bg-tg-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-xs font-semibold text-tg-text hover:bg-tg-secondary-bg active:scale-95 transition-transform flex items-center justify-center gap-2"
+        >
+          <Sliders class="w-3.5 h-3.5 text-fematch-violet-500" />
+          <span>Ajustar Filtros de Búsqueda</span>
+        </button>
+      </div>
     </div>
 
     <!-- Modal de Celebración de Match -->

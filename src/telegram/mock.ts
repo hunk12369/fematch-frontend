@@ -26,7 +26,7 @@ const MOCK_THEME: TelegramThemeParams = {
   accent_text_color: '#ec4899',
 }
 
-// Generate realistic mock initData query string for development testing
+// Genera initData realista para desarrollo local únicamente
 const mockInitDataQuery = `query_id=AAHdF6IQAAAAAN0XohD3Z9xP&user=${encodeURIComponent(
   JSON.stringify(MOCK_USER)
 )}&auth_date=${Math.floor(Date.now() / 1000)}&hash=mock_fematch_hash_for_development_purposes`
@@ -34,9 +34,16 @@ const mockInitDataQuery = `query_id=AAHdF6IQAAAAAN0XohD3Z9xP&user=${encodeURICom
 export function setupTelegramMock(): void {
   if (typeof window === 'undefined') return
 
+  // Comprobar estrictamente si estamos en localhost
+  const host = window.location.hostname
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.endsWith('.localhost')
+  if (!isLocal) {
+    return
+  }
+
   // Only mock if Telegram WebApp is not already present
   if (!window.Telegram || !window.Telegram.WebApp || !window.Telegram.WebApp.initData) {
-    console.info('🛠️ [Fematch TMA] Inyectando entorno Mock de Telegram para desarrollo local.')
+    console.info('🛠️ [Fematch TMA] Inyectando entorno Mock de Telegram para desarrollo local (localhost).')
 
     const mockWebApp: TelegramWebApp = {
       initData: mockInitDataQuery,

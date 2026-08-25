@@ -11,79 +11,42 @@ import type {
 
 export const matchService = {
   /**
-   * Obtiene el feed de candidatos filtrado por preferencias (género, edad), paginado (20 perfiles)
+   * Obtiene el feed de candidatos desde el backend real
    * GET /api/feed?page=1&limit=20
    */
-  getDiscoveryFeed: async (page = 1, limit = 20): Promise<MatchCandidate[]> => {
+  getFeed: async (page = 1, limit = 20): Promise<MatchCandidate[]> => {
     try {
-      const response = await http.get<ApiResponse<FeedResponse>>('/api/feed', {
+      const response = await http.get<ApiResponse<FeedResponse> & FeedResponse>('/api/feed', {
         page,
         limit,
       })
-      const profiles = response.data?.profiles || []
-      if (profiles.length > 0) return profiles
-      throw new Error('Feed vacío')
-    } catch {
-      // Mock data de respaldo para demo de Fematch
-      return [
-        {
-          id: 'cand_01',
-          telegramId: 101,
-          name: 'Camila',
-          age: 24,
-          bio: 'Arquitecta & aficionada a las plantas 🌿. Me encanta recorrer galerías de arte y probar repostería.',
-          gender: 'female',
-          gender_identity: 'Lesbiana',
-          photos: [
-            'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80',
-            'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=800&q=80',
-          ],
-          interests: ['Arquitectura', 'Arte Moderno', 'Plantas', 'Yoga'],
-          distanceKm: 2,
-          compatibilityScore: 94,
-          verified: true,
-          online: true,
-          premium: false,
-        },
-        {
-          id: 'cand_02',
-          telegramId: 102,
-          name: 'Valeria',
-          age: 27,
-          bio: 'Product Designer & Melómana. Fan de los atardeceres en la playa 🌅 y los vinilos.',
-          gender: 'female',
-          gender_identity: 'Bisexual',
-          photos: [
-            'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=800&q=80',
-            'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=800&q=80',
-          ],
-          interests: ['Diseño UI', 'Música', 'Playa', 'Tatuajes', 'Mascotas'],
-          distanceKm: 4,
-          compatibilityScore: 89,
-          verified: true,
-          online: false,
-          premium: true,
-        },
-        {
-          id: 'cand_03',
-          telegramId: 103,
-          name: 'Sofía',
-          age: 25,
-          bio: 'Escritora & ciclista urbana. Buscando a alguien con quien compartir charlas nocturnas y libros 📖✨.',
-          gender: 'female',
-          gender_identity: 'Queer',
-          photos: [
-            'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80',
-          ],
-          interests: ['Literatura', 'Ciclismo', 'Cine', 'Café'],
-          distanceKm: 5,
-          compatibilityScore: 98,
-          verified: true,
-          online: true,
-          premium: false,
-        },
-      ]
+
+      // Extraer lista de perfiles del backend
+      if (response?.data && Array.isArray(response.data.profiles)) {
+        return response.data.profiles
+      }
+      if (Array.isArray(response?.profiles)) {
+        return response.profiles
+      }
+      if (Array.isArray(response?.data)) {
+        return response.data as unknown as MatchCandidate[]
+      }
+      if (Array.isArray(response)) {
+        return response as unknown as MatchCandidate[]
+      }
+
+      return []
+    } catch (error) {
+      console.warn('⚠️ [matchService.getFeed] Sin perfiles o error en /api/feed:', error)
+      return []
     }
+  },
+
+  /**
+   * Alias de compatibilidad para getFeed
+   */
+  getDiscoveryFeed: async (page = 1, limit = 20): Promise<MatchCandidate[]> => {
+    return matchService.getFeed(page, limit)
   },
 
   /**
@@ -95,7 +58,6 @@ export const matchService = {
       const payload: SwipePayload = { targetUserId, type }
       const response = await http.post<ApiResponse<SwipeResponse> & SwipeResponse>('/api/swipe', payload)
 
-      // Manejar tanto formato { success, match, matchId, ... } directo como envuelto en { data: { ... } }
       if (typeof response.match === 'boolean') {
         return response
       }
@@ -106,19 +68,17 @@ export const matchService = {
         success: true,
         match: false,
       }
-    } catch {
-      // Simular respuesta si no hay backend activo
-      const isMatch = type !== 'DISLIKE' && Math.random() > 0.35
+    } catch (error) {
+      console.warn('⚠️ [matchService.swipe] Error al registrar swipe:', error)
       return {
-        success: true,
-        match: isMatch,
-        matchId: isMatch ? `match_${targetUserId}_${Date.now()}` : undefined,
+        success: false,
+        match: false,
       }
     }
   },
 
   /**
-   * Wrapper compatible para interactuar desde SwipeDeck ('like' | 'pass' | 'superlike')
+   * Wrapper interactivo desde la baraja de SwipeDeck ('like' | 'pass' | 'superlike')
    */
   interact: async (candidateId: string, action: 'like' | 'pass' | 'superlike') => {
     const typeMap: Record<'like' | 'pass' | 'superlike', SwipeType> = {
@@ -135,80 +95,42 @@ export const matchService = {
   },
 
   /**
-   * Obtiene la lista de matches activos
+   * Obtiene la lista de matches activos del backend
+   * GET /api/matches
    */
-  getMatches: async () => {
+  getMatches: async (): Promise<MatchCandidate[]> => {
     try {
-      const response = await http.get<ApiResponse<MatchCandidate[]>>('/api/matches')
-      return response.data
-    } catch {
-      return [
-        {
-          id: 'cand_01',
-          telegramId: 101,
-          name: 'Camila',
-          age: 24,
-          bio: 'Arquitecta & aficionada a las plantas 🌿',
-          gender: 'female',
-          gender_identity: 'Lesbiana',
-          photos: ['https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80'],
-          interests: ['Arquitectura', 'Arte Moderno'],
-          compatibilityScore: 94,
-          verified: true,
-          online: true,
-          premium: false,
-          lastMessage: '¡Hola Elena! Me encantó tu foto en el museo 🎨',
-          lastMessageTime: '12:30',
-          unreadCount: 1,
-        },
-        {
-          id: 'cand_03',
-          telegramId: 103,
-          name: 'Sofía',
-          age: 25,
-          bio: 'Escritora & ciclista urbana',
-          gender: 'female',
-          gender_identity: 'Queer',
-          photos: ['https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80'],
-          interests: ['Literatura', 'Ciclismo'],
-          compatibilityScore: 98,
-          verified: true,
-          online: false,
-          premium: false,
-          lastMessage: '¡Hicieron Match! Inicia la conversación ✨',
-          lastMessageTime: 'Ayer',
-          unreadCount: 0,
-        },
-      ]
+      const response = await http.get<ApiResponse<MatchCandidate[]> & MatchCandidate[]>('/api/matches')
+      if (Array.isArray(response?.data)) {
+        return response.data
+      }
+      if (Array.isArray(response)) {
+        return response
+      }
+      return []
+    } catch (error) {
+      console.warn('⚠️ [matchService.getMatches] Error al obtener matches:', error)
+      return []
     }
   },
 
   /**
-   * Obtiene los mensajes de un chat
+   * Obtiene los mensajes de un chat del backend
+   * GET /api/chats/:chatId/messages
    */
   getMessages: async (chatId: string): Promise<ChatMessage[]> => {
     try {
-      const response = await http.get<ApiResponse<ChatMessage[]>>(`/api/chats/${chatId}/messages`)
-      return response.data
-    } catch {
-      return [
-        {
-          id: 'm1',
-          senderId: 'cand_01',
-          receiverId: 'usr_local_01',
-          content: '¡Hola Elena! Me encantó tu foto en el museo 🎨',
-          timestamp: '12:30',
-          isRead: true,
-        },
-        {
-          id: 'm2',
-          senderId: 'usr_local_01',
-          receiverId: 'cand_01',
-          content: '¡Hola Camila! Muchas gracias, es de una expo del mes pasado 😊 ¿A ti también te gusta el arte contemporáneo?',
-          timestamp: '12:34',
-          isRead: true,
-        },
-      ]
+      const response = await http.get<ApiResponse<ChatMessage[]> & ChatMessage[]>(`/api/chats/${chatId}/messages`)
+      if (Array.isArray(response?.data)) {
+        return response.data
+      }
+      if (Array.isArray(response)) {
+        return response
+      }
+      return []
+    } catch (error) {
+      console.warn(`⚠️ [matchService.getMessages] Error al obtener mensajes de ${chatId}:`, error)
+      return []
     }
   },
 }
