@@ -4,7 +4,7 @@ import axios, {
   type AxiosResponse,
   type AxiosError,
 } from 'axios'
-import { getTelegramInitData } from '@/telegram/init'
+import { getTelegramInitDataRaw, hasValidTelegramInitData } from '@/telegram/init'
 
 // Base URL configurada desde variables de entorno
 const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || ''
@@ -24,27 +24,24 @@ export const apiClient: AxiosInstance = axios.create({
 
 /**
  * Interceptor de Peticiones:
- * Adjunta automáticamente las cabeceras:
- * - Authorization: tma ${window.Telegram.WebApp.initData}
- * - x-telegram-init-data: ${window.Telegram.WebApp.initData}
- * a todas las llamadas salientes hacia el Backend.
+ * Solo adjunta la cabecera Authorization / x-telegram-init-data si initData contiene la firma 'hash='
  */
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // 1. Obtener initData directamente de window.Telegram.WebApp o del SDK helper
-    const initData = window.Telegram?.WebApp?.initData || getTelegramInitData()
+    const initData = getTelegramInitDataRaw()
 
-    if (initData) {
+    if (initData && initData.includes('hash=')) {
       // Formato estándar Telegram Mini Apps
       config.headers.set('Authorization', `tma ${initData}`)
       config.headers.set('x-telegram-init-data', initData)
     } else {
+      // Si no hay hash válido, no adjuntar cabecera inválida
       console.warn(
-        '⚠️ [Fematch API] Petición enviada sin Authorization (initData no disponible todavía)'
+        '⚠️ [Fematch API] Petición sin hash en initData. Omitiendo Authorization tma para evitar 401.'
       )
     }
 
-    // Cabeceras adicionales útiles para la Mini App
+    // Cabeceras adicionales de tema Telegram
     if (window.Telegram?.WebApp?.colorScheme) {
       config.headers.set('X-Telegram-Theme', window.Telegram.WebApp.colorScheme)
     }
@@ -75,7 +72,6 @@ apiClient.interceptors.response.use(
             '🔒 [Fematch API 401 Unauthorized] initData inválido o sesión expirada de Telegram:',
             data
           )
-          // Notificar al usuario a través de la interfaz nativa de Telegram si está disponible
           window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error')
           break
 
@@ -97,7 +93,7 @@ apiClient.interceptors.response.use(
           console.error(`⚠️ [Fematch API Error ${status}]:`, data)
       }
     } else if (error.request) {
-      console.error('📡 [Fematch API Network Error] Sin respuesta del servidor:', error.message)
+      console.warn('📡 [Fematch API Network Warning] Sin respuesta del backend:', error.message)
     } else {
       console.error('⚠️ [Fematch API Config Error]:', error.message)
     }
@@ -125,5 +121,7 @@ export const http = {
   delete: <T = unknown>(url: string) =>
     apiClient.delete<T>(url).then((res) => res.data),
 }
+
+export { hasValidTelegramInitData }
 
 export default apiClient

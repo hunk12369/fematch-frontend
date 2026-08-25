@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { TelegramUser, TelegramThemeParams } from '@/telegram/types'
-import { initializeTelegramApp } from '@/telegram/init'
+import { initializeTelegramApp, getTelegramInitDataRaw } from '@/telegram/init'
 import { applyTelegramTheme } from '@/telegram/theme'
 
 export const useTelegramStore = defineStore('telegram', () => {
@@ -13,6 +13,7 @@ export const useTelegramStore = defineStore('telegram', () => {
   const themeParams = ref<TelegramThemeParams>({})
 
   const isDarkMode = computed(() => colorScheme.value === 'dark')
+  const hasValidInitData = computed(() => Boolean(initData.value && initData.value.includes('hash=')))
   const userFullName = computed(() => {
     if (!user.value) return 'Usuario Fematch'
     return `${user.value.first_name} ${user.value.last_name || ''}`.trim()
@@ -27,7 +28,7 @@ export const useTelegramStore = defineStore('telegram', () => {
     const result = await initializeTelegramApp()
     isInsideTelegram.value = result.isInsideTelegram
     user.value = result.user
-    initData.value = result.initDataRaw
+    initData.value = result.initDataRaw || getTelegramInitDataRaw()
     colorScheme.value = result.colorScheme
 
     const webApp = window.Telegram?.WebApp
@@ -55,6 +56,7 @@ export const useTelegramStore = defineStore('telegram', () => {
     colorScheme,
     themeParams,
     isDarkMode,
+    hasValidInitData,
     userFullName,
     initialize,
     toggleTheme,

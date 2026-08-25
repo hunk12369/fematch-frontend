@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useMatchesStore } from '@/stores/matches.store'
 import { useUserStore } from '@/stores/user.store'
+import { hasValidTelegramInitData } from '@/telegram/init'
 import SwipeDeck from '@/components/ui/SwipeDeck.vue'
 import EditProfileModal from '@/components/profile/EditProfileModal.vue'
 
@@ -10,8 +11,10 @@ const userStore = useUserStore()
 const isFiltersModalOpen = ref(false)
 
 onMounted(() => {
-  // Siempre consultar el feed real desde el backend al montar la vista
-  matchesStore.loadDiscoveryFeed(true)
+  // Solo consultar el feed del backend si disponemos de credenciales válidas con hash de Telegram
+  if (hasValidTelegramInitData()) {
+    matchesStore.loadDiscoveryFeed(true)
+  }
 })
 
 function handleOpenFilters() {
@@ -19,8 +22,9 @@ function handleOpenFilters() {
 }
 
 function handleFiltersSaved() {
-  // Recargar el feed con las nuevas preferencias de búsqueda
-  matchesStore.loadDiscoveryFeed(true)
+  if (hasValidTelegramInitData()) {
+    matchesStore.loadDiscoveryFeed(true)
+  }
 }
 </script>
 

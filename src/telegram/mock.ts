@@ -1,6 +1,6 @@
 import type { TelegramWebApp, TelegramThemeParams, TelegramUser } from './types'
 
-const MOCK_USER: TelegramUser = {
+export const MOCK_USER: TelegramUser = {
   id: 987654321,
   first_name: 'Elena',
   last_name: 'Vargas',
@@ -10,7 +10,7 @@ const MOCK_USER: TelegramUser = {
   photo_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
 }
 
-const MOCK_THEME: TelegramThemeParams = {
+export const MOCK_THEME: TelegramThemeParams = {
   bg_color: '#ffffff',
   secondary_bg_color: '#fdf2f8',
   text_color: '#1e1e24',
@@ -26,27 +26,24 @@ const MOCK_THEME: TelegramThemeParams = {
   accent_text_color: '#ec4899',
 }
 
-// Genera initData realista para desarrollo local únicamente
-const mockInitDataQuery = `query_id=AAHdF6IQAAAAAN0XohD3Z9xP&user=${encodeURIComponent(
+// Genera initData realista para desarrollo local con hash incluido
+export const MOCK_INIT_DATA = `query_id=AAHdF6IQAAAAAN0XohD3Z9xP&user=${encodeURIComponent(
   JSON.stringify(MOCK_USER)
 )}&auth_date=${Math.floor(Date.now() / 1000)}&hash=mock_fematch_hash_for_development_purposes`
+
+export function getMockInitData(): string {
+  return MOCK_INIT_DATA
+}
 
 export function setupTelegramMock(): void {
   if (typeof window === 'undefined') return
 
-  // Comprobar estrictamente si estamos en localhost
-  const host = window.location.hostname
-  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.endsWith('.localhost')
-  if (!isLocal) {
-    return
-  }
-
-  // Only mock if Telegram WebApp is not already present
-  if (!window.Telegram || !window.Telegram.WebApp || !window.Telegram.WebApp.initData) {
-    console.info('🛠️ [Fematch TMA] Inyectando entorno Mock de Telegram para desarrollo local (localhost).')
+  // Only mock if Telegram WebApp is not already present with valid hash
+  if (!window.Telegram?.WebApp?.initData || !window.Telegram.WebApp.initData.includes('hash=')) {
+    console.info('🛠️ [Fematch TMA] Inyectando entorno Mock de Telegram para desarrollo local.')
 
     const mockWebApp: TelegramWebApp = {
-      initData: mockInitDataQuery,
+      initData: MOCK_INIT_DATA,
       initDataUnsafe: {
         query_id: 'AAHdF6IQAAAAAN0XohD3Z9xP',
         user: MOCK_USER,

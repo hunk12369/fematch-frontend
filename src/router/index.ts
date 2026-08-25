@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores/user.store'
+import { hasValidTelegramInitData } from '@/telegram/init'
 import DiscoverView from '@/views/DiscoverView.vue'
 
 const routes: RouteRecordRaw[] = [
@@ -66,18 +67,18 @@ const router = createRouter({
 
 /**
  * Navigation Guard Global:
- * Al iniciar la app, llama a /api/user/me (a través de userStore.fetchMe()).
+ * Al iniciar la app, comprueba que exista hash en initData antes de consultar /api/auth/telegram.
  * Si isNewUser === true, redirige automáticamente a la pantalla de OnboardingView.
  */
 router.beforeEach(async (to, _from, next) => {
   const userStore = useUserStore()
 
-  // 1. Obtener perfil de /api/user/me si no está cargado todavía
-  if (!userStore.isLoaded) {
+  // 1. Solo consultar backend si disponemos de initData con hash válido
+  if (hasValidTelegramInitData() && !userStore.isLoaded) {
     try {
       await userStore.fetchMe()
     } catch (error) {
-      console.warn('⚠️ [Router Guard] Error al cargar /api/user/me:', error)
+      console.warn('⚠️ [Router Guard] Error o sesión no iniciada en backend:', error)
     }
   }
 
@@ -87,7 +88,7 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   // 3. Si ya completó el onboarding e intenta acceder a /onboarding, redirigir a /discover
-  if (!userStore.isNewUser && to.name === 'onboarding') {
+  if (!userStore.isNewUser && userStore.isLoaded && to.name === 'onboarding') {
     return next({ name: 'discover' })
   }
 
@@ -102,10 +103,10 @@ router.afterEach((to) => {
   const isRoot = Boolean(to.meta.isRoot)
 
   if (isRoot) {
-    webApp.BackButton.hide()
+    webApp.BackButton?.hide?.()
   } else {
-    webApp.BackButton.show()
-    webApp.BackButton.onClick(() => {
+    webApp.BackButton?.show?.()
+    webApp.BackButton?.onClick?.(() => {
       router.back()
     })
   }

@@ -6,7 +6,7 @@ import {
   swipeBehavior,
   closingBehavior,
 } from '@telegram-apps/sdk'
-import { setupTelegramMock } from './mock'
+import { setupTelegramMock, getMockInitData } from './mock'
 import { setupTelegramThemeListener } from './theme'
 import type { TelegramWebApp, TelegramUser } from './types'
 
@@ -17,6 +17,7 @@ export interface TMAInitResult {
   user: TelegramUser | null
   initDataRaw: string
   colorScheme: 'light' | 'dark'
+  isValid: boolean
 }
 
 /**
@@ -35,52 +36,99 @@ export function isLocalhost(): boolean {
 }
 
 /**
- * Extrae el initData de Telegram desde:
- * 1. window.Telegram.WebApp.initData
- * 2. Hash de URL (#tgWebAppData=... o #tgWebAppInitData=...)
- * 3. Search query (?tgWebAppData=... o ?tgWebAppInitData=...)
+ * Función robusta para obtener el initData de Telegram con validación de hash:
  * 
- * Si no estamos en localhost, desactiva cualquier dato mock estático.
+ * - Prioridad 1: window.Telegram?.WebApp?.initData (si no está vacío y contiene hash=).
+ * - Prioridad 2: Extraer y decodificar el parámetro de la URL window.location.hash buscando 'tgWebAppData=' o '#tgWebAppData='.
+ * - Prioridad 3: Extraer de los search params (?tgWebAppData=...).
+ * - Prioridad 4: Fallback solo si import.meta.env.DEV es true (o VITE_ENABLE_DEV_TMA_MOCK === 'true').
+ *   Si está en producción y no hay datos válidos con hash=, retorna string vacío "".
  */
-export function extractTelegramInitData(): string {
+export function getTelegramInitDataRaw(): string {
   if (typeof window === 'undefined') return ''
 
-  // 1. Objeto nativo Telegram WebApp
+  // Prioridad 1: window.Telegram?.WebApp?.initData (si no está vacío)
   const webAppInitData = window.Telegram?.WebApp?.initData
-  if (webAppInitData && typeof webAppInitData === 'string' && webAppInitData.trim().length > 0) {
-    if (!webAppInitData.includes('mock_fematch') || isLocalhost()) {
-      return webAppInitData.trim()
+  if (typeof webAppInitData === 'string' && webAppInitData.trim().length > 0) {
+    const trimmed = webAppInitData.trim()
+    if (trimmed.includes('hash=')) {
+      return trimmed
     }
   }
 
-  // 2. Extraer de Hash de URL (#tgWebAppData=... o #tgWebAppInitData=...)
-  const hash = window.location.hash || ''
-  if (hash) {
-    const hashClean = hash.startsWith('#') ? hash.slice(1) : hash
+  // Prioridad 2: Extraer y decodificar el parámetro de URL hash (#tgWebAppData=... o #tgWebAppInitData=...)
+  const rawHash = window.location.hash || ''
+  if (rawHash) {
+    const hashClean = rawHash.startsWith('#') ? rawHash.slice(1) : rawHash
     const params = new URLSearchParams(hashClean)
     const tgWebAppData = params.get('tgWebAppData') || params.get('tgWebAppInitData')
+
     if (tgWebAppData && tgWebAppData.trim().length > 0) {
-      return decodeURIComponent(tgWebAppData.trim())
+      let decoded = tgWebAppData.trim()
+      try {
+        decoded = decodeURIComponent(decoded)
+      } catch {
+        // En caso de fallo en decodeURIComponent, usar valor crudo
+      }
+      if (decoded.includes('hash=')) {
+        return decoded
+      }
+    }
+
+    // Extracción regex directa en hash por si no estuviese estructurado como querystring
+    if (hashClean.includes('tgWebAppData=')) {
+      const match = hashClean.match(/tgWebAppData=([^&]+)/)
+      if (match && match[1]) {
+        let decoded = match[1]
+        try {
+          decoded = decodeURIComponent(decoded)
+        } catch {}
+        if (decoded.includes('hash=')) {
+          return decoded
+        }
+      }
     }
   }
 
-  // 3. Extraer de Query Parameters (?tgWebAppData=... o ?tgWebAppInitData=...)
-  const search = window.location.search || ''
-  if (search) {
-    const searchClean = search.startsWith('?') ? search.slice(1) : search
+  // Prioridad 3: Extraer de los search params (?tgWebAppData=... o ?tgWebAppInitData=...)
+  const rawSearch = window.location.search || ''
+  if (rawSearch) {
+    const searchClean = rawSearch.startsWith('?') ? rawSearch.slice(1) : rawSearch
     const params = new URLSearchParams(searchClean)
     const tgWebAppData = params.get('tgWebAppData') || params.get('tgWebAppInitData')
+
     if (tgWebAppData && tgWebAppData.trim().length > 0) {
-      return decodeURIComponent(tgWebAppData.trim())
+      let decoded = tgWebAppData.trim()
+      try {
+        decoded = decodeURIComponent(decoded)
+      } catch {}
+      if (decoded.includes('hash=')) {
+        return decoded
+      }
     }
   }
 
-  // 4. Solo usar mock estático si estamos explícitamente en localhost y con la variable activada
-  if (isLocalhost() && import.meta.env.VITE_ENABLE_DEV_TMA_MOCK === 'true') {
-    return window.Telegram?.WebApp?.initData || ''
+  // Prioridad 4: Fallback solo si import.meta.env.DEV es true o se habilitó explícitamente en localhost
+  const isDevMode = Boolean(import.meta.env.DEV)
+  const isMockEnabled = import.meta.env.VITE_ENABLE_DEV_TMA_MOCK === 'true'
+
+  if (isDevMode || (isLocalhost() && isMockEnabled)) {
+    if (webAppInitData && webAppInitData.includes('hash=')) {
+      return webAppInitData
+    }
+    return getMockInitData()
   }
 
+  // Si está en producción y no hay datos válidos, retornar string vacío
   return ''
+}
+
+/**
+ * Comprueba si disponemos de un initData de Telegram con firma/hash válido
+ */
+export function hasValidTelegramInitData(): boolean {
+  const raw = getTelegramInitDataRaw()
+  return Boolean(raw && raw.includes('hash='))
 }
 
 /**
@@ -89,7 +137,7 @@ export function extractTelegramInitData(): string {
 export function isInsideTelegramApp(): boolean {
   if (typeof window === 'undefined') return false
 
-  const rawInitData = extractTelegramInitData()
+  const rawInitData = getTelegramInitDataRaw()
   if (rawInitData && !rawInitData.includes('mock_fematch')) {
     return true
   }
@@ -98,7 +146,7 @@ export function isInsideTelegramApp(): boolean {
   if (
     webApp &&
     typeof webApp.initData === 'string' &&
-    webApp.initData.length > 0 &&
+    webApp.initData.includes('hash=') &&
     !webApp.initData.includes('mock_fematch')
   ) {
     return true
@@ -113,19 +161,21 @@ export function isInsideTelegramApp(): boolean {
 export async function initializeTelegramApp(): Promise<TMAInitResult> {
   if (isInitialized) {
     const webApp = window.Telegram?.WebApp
-    const initDataRaw = extractTelegramInitData()
+    const initDataRaw = getTelegramInitDataRaw()
+    const isValid = hasValidTelegramInitData()
     return {
       isInsideTelegram: isInsideTelegramApp(),
       user: webApp?.initDataUnsafe?.user || null,
       initDataRaw,
       colorScheme: webApp?.colorScheme || 'light',
+      isValid,
     }
   }
 
   const inTelegram = isInsideTelegramApp()
-  const allowMock = isLocalhost() && import.meta.env.VITE_ENABLE_DEV_TMA_MOCK === 'true'
+  const allowMock = (Boolean(import.meta.env.DEV) || isLocalhost()) && import.meta.env.VITE_ENABLE_DEV_TMA_MOCK === 'true'
 
-  // Solo inyectar mock si NO estamos dentro de Telegram y estamos en localhost
+  // Solo inyectar mock si NO estamos dentro de Telegram real y estamos en dev/localhost
   if (!inTelegram && allowMock) {
     setupTelegramMock()
   }
@@ -181,7 +231,6 @@ export async function initializeTelegramApp(): Promise<TMAInitResult> {
   const webApp: TelegramWebApp | undefined = window.Telegram?.WebApp
 
   if (webApp) {
-    // Expandir app a pantalla completa
     try {
       webApp.expand()
       webApp.ready()
@@ -196,15 +245,16 @@ export async function initializeTelegramApp(): Promise<TMAInitResult> {
   isInitialized = true
 
   const user = webApp?.initDataUnsafe?.user || null
-  const initDataRaw = extractTelegramInitData()
+  const initDataRaw = getTelegramInitDataRaw()
   const colorScheme = webApp?.colorScheme || 'light'
+  const isValid = hasValidTelegramInitData()
 
   console.log('🚀 [Fematch TMA] Mini App Inicializada:', {
     user: user ? `${user.first_name} (@${user.username || 'sin_alias'})` : 'Anónimo',
     colorScheme,
-    hasInitData: Boolean(initDataRaw),
+    hasValidInitData: isValid,
     isInsideTelegram: inTelegram,
-    isLocalhost: isLocalhost(),
+    isDev: import.meta.env.DEV,
   })
 
   return {
@@ -212,6 +262,7 @@ export async function initializeTelegramApp(): Promise<TMAInitResult> {
     user,
     initDataRaw,
     colorScheme,
+    isValid,
   }
 }
 
@@ -219,5 +270,5 @@ export async function initializeTelegramApp(): Promise<TMAInitResult> {
  * Obtiene el initData raw actual para las peticiones de autenticación
  */
 export function getTelegramInitData(): string {
-  return extractTelegramInitData()
+  return getTelegramInitDataRaw()
 }
