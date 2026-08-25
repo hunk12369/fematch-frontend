@@ -67,28 +67,43 @@ const router = createRouter({
 
 /**
  * Navigation Guard Global:
- * Al iniciar la app, comprueba que exista hash en initData antes de consultar /api/auth/telegram.
- * Si isNewUser === true, redirige automáticamente a la pantalla de OnboardingView.
+ * 1. Verifica si existe initData de Telegram válido.
+ * 2. Si no hay initData (acceso directo en navegador), App.vue mostrará la modal/pantalla bloqueante.
+ * 3. Si hay initData:
+ *    - Llama al servicio de usuario (GET /api/user/me).
+ *    - Si isNewUser === true o el perfil no existe en BD, fuerza la redirección a '/onboarding'
+ *      y no permite acceder a '/discover', '/matches', '/profile' ni '/chat'.
+ *    - Si isNewUser === false, permite continuar a '/discover' y bloquea '/onboarding'.
  */
 router.beforeEach(async (to, _from, next) => {
+  // 1. Si no hay initData de Telegram, permitir la navegación para que App.vue muestre la pantalla de bienvenida/bloqueo de Telegram
+  if (!hasValidTelegramInitData()) {
+    return next()
+  }
+
   const userStore = useUserStore()
 
-  // 1. Solo consultar backend si disponemos de initData con hash válido
-  if (hasValidTelegramInitData() && !userStore.isLoaded) {
+  // 2. Si aún no se ha cargado el usuario, consultar al backend
+  if (!userStore.isLoaded) {
     try {
       await userStore.fetchMe()
     } catch (error) {
-      console.warn('⚠️ [Router Guard] Error o sesión no iniciada en backend:', error)
+      console.warn('⚠️ [Router Guard] Error al obtener datos de usuario:', error)
     }
   }
 
-  // 2. Si es un nuevo usuario (isNewUser === true) y no está en /onboarding, redirigir a Onboarding
-  if (userStore.isNewUser && to.name !== 'onboarding') {
-    return next({ name: 'onboarding' })
+  const needsOnboarding = userStore.isNewUser || userStore.isProfileIncomplete || !userStore.profile
+
+  // 3. Si es nuevo usuario o perfil incompleto, forzar /onboarding
+  if (needsOnboarding) {
+    if (to.name !== 'onboarding') {
+      return next({ name: 'onboarding' })
+    }
+    return next()
   }
 
-  // 3. Si ya completó el onboarding e intenta acceder a /onboarding, redirigir a /discover
-  if (!userStore.isNewUser && userStore.isLoaded && to.name === 'onboarding') {
+  // 4. Si ya completó el onboarding y trata de entrar a /onboarding, enviar a /discover
+  if (!needsOnboarding && to.name === 'onboarding') {
     return next({ name: 'discover' })
   }
 

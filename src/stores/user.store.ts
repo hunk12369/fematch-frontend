@@ -13,7 +13,7 @@ export const useUserStore = defineStore('user', () => {
   /**
    * Obtiene la información del usuario actual sincronizando con /api/auth/telegram
    */
-  async function fetchMe(): Promise<User> {
+  async function fetchMe(): Promise<User | null> {
     isLoading.value = true
     try {
       const data = await userService.getMe()

@@ -145,7 +145,7 @@ defineExpose({
           <span>Fematch Radar</span>
         </div>
         <h3 class="text-lg font-extrabold text-tg-text mb-1">
-          No hay perfiles cerca por ahora
+          No hay perfiles cercanos en este momento
         </h3>
         <p class="text-xs text-tg-hint leading-relaxed">
           Has explorado todos los perfiles disponibles en tu área con tus filtros actuales. Intenta ampliar el radio de distancia o tus preferencias.
