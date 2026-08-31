@@ -6,7 +6,6 @@ import { useUserStore } from '@/stores/user.store'
 import { hasValidTelegramInitData } from '@/telegram/init'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import BottomNav from '@/components/layout/BottomNav.vue'
-import DevBanner from '@/components/dev/DevBanner.vue'
 import PremiumModal from '@/components/premium/PremiumModal.vue'
 import { Send, Sparkles, ShieldCheck, HeartHandshake, ExternalLink } from 'lucide-vue-next'
 
@@ -45,9 +44,6 @@ function openTelegramBot() {
   <div
     class="flex flex-col h-full w-full max-w-md mx-auto bg-tg-bg text-tg-text relative overflow-hidden shadow-2xl transition-colors duration-200 select-none"
   >
-    <!-- Dev Banner (indicador de entorno Mock / Real TMA en desarrollo) -->
-    <DevBanner />
-
     <!-- ======================================================== -->
     <!-- VISTA BLOQUEANTE: ACCESO FUERA DE TELEGRAM               -->
     <!-- ======================================================== -->

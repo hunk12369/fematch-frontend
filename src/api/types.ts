@@ -60,6 +60,8 @@ export interface User {
   genderIdentity: GenderIdentity | string
   bio?: string
   city?: string
+  latitude?: number | null
+  longitude?: number | null
   isVip: boolean
   photos: UserPhoto[]
   preference?: Preference
@@ -106,6 +108,8 @@ export interface OnboardingPayload {
   birth_date: string // "YYYY-MM-DD"
   bio?: string
   city?: string
+  latitude?: number | null
+  longitude?: number | null
   target_genders: string[]
   min_age: number
   max_age: number

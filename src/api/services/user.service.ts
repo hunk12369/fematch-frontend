@@ -98,6 +98,8 @@ export const userService = {
         genderIdentity: payload.gender_identity,
         bio: payload.bio || '',
         city: payload.city || '',
+        latitude: payload.latitude ?? null,
+        longitude: payload.longitude ?? null,
         isVip: localCachedUser?.isVip || false,
         photos: localCachedUser?.photos || [],
         preference: {

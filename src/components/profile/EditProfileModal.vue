@@ -20,6 +20,8 @@ import {
   Compass,
   UploadCloud,
   AlertCircle,
+  Navigation,
+  Check,
 } from 'lucide-vue-next'
 
 const props = defineProps<{
@@ -35,6 +37,9 @@ const emit = defineEmits<{
 const haptics = useHaptics()
 const isSaving = ref(false)
 const isUploadingPhoto = ref(false)
+const isDetectingLocation = ref(false)
+const locationDetected = ref(false)
+const locationError = ref<string | null>(null)
 const uploadErrorMessage = ref<string | null>(null)
 const activeTab = ref<'profile' | 'preferences'>('profile')
 
@@ -47,6 +52,8 @@ const form = reactive({
   birth_date: '2000-01-01',
   bio: '',
   city: 'Madrid',
+  latitude: null as number | null,
+  longitude: null as number | null,
   photos: [] as UserPhoto[],
   target_genders: ['FEMBOY', 'TRANS_FEM', 'TRANS_MASC', 'CROSSDRESSER', 'MAN', 'OTHER'] as string[],
   min_age: 18,
@@ -78,6 +85,10 @@ watch(
       form.birth_date = p.birthDate || '2000-01-01'
       form.bio = p.bio || ''
       form.city = p.city || 'Madrid'
+      form.latitude = p.latitude ?? null
+      form.longitude = p.longitude ?? null
+      locationDetected.value = Boolean(p.latitude && p.longitude)
+      locationError.value = null
       form.photos = p.photos ? [...p.photos] : []
       form.target_genders = p.preference?.targetGenders
         ? [...p.preference.targetGenders]
@@ -97,6 +108,45 @@ function triggerFileInput() {
   haptics.impact('light')
   uploadErrorMessage.value = null
   fileInputRef.value?.click()
+}
+
+/**
+ * Solicita coordenadas GPS mediante la API de Geolocalización del navegador
+ */
+function requestGeolocation() {
+  if (!navigator.geolocation) {
+    locationError.value = 'Geolocalización no soportada en este dispositivo.'
+    haptics.notification('error')
+    return
+  }
+
+  isDetectingLocation.value = true
+  locationError.value = null
+  haptics.impact('medium')
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      form.latitude = position.coords.latitude
+      form.longitude = position.coords.longitude
+      locationDetected.value = true
+      isDetectingLocation.value = false
+      haptics.notification('success')
+    },
+    (error) => {
+      console.warn('GPS denegado o no disponible:', error.message)
+      form.latitude = null
+      form.longitude = null
+      isDetectingLocation.value = false
+      locationDetected.value = false
+      if (error.code === error.PERMISSION_DENIED) {
+        locationError.value = 'Permiso de ubicación denegado.'
+      } else {
+        locationError.value = 'No se pudo obtener la ubicación GPS.'
+      }
+      haptics.notification('warning')
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  )
 }
 
 // Handler de selección y validación de archivos (< 5MB) y subida a Cloudflare R2
@@ -207,6 +257,8 @@ async function onSave() {
       birth_date: form.birth_date,
       bio: form.bio.trim(),
       city: form.city.trim(),
+      latitude: form.latitude ?? null,
+      longitude: form.longitude ?? null,
       target_genders: [...form.target_genders],
       min_age: Number(form.min_age),
       max_age: Number(form.max_age),
@@ -429,15 +481,49 @@ async function onSave() {
               </span>
             </div>
 
-            <!-- Ciudad -->
-            <div class="space-y-1">
+            <!-- Ciudad y Geolocalización GPS -->
+            <div class="space-y-2">
               <label class="text-[11px] font-bold text-tg-hint">Ciudad actual</label>
-              <input
-                v-model="form.city"
-                type="text"
-                placeholder="ej. Madrid, Barcelona..."
-                class="w-full px-3.5 py-2.5 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400 font-semibold"
-              />
+              <div class="relative">
+                <MapPin class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fematch-cyan-500" />
+                <input
+                  v-model="form.city"
+                  type="text"
+                  placeholder="ej. Madrid, Barcelona..."
+                  class="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-100 dark:border-fematch-violet-900/40 text-xs text-tg-text focus:outline-none focus:ring-2 focus:ring-fematch-pink-400 font-semibold"
+                />
+              </div>
+
+              <!-- Botón interactivo: Usar mi ubicación actual -->
+              <button
+                type="button"
+                :disabled="isDetectingLocation"
+                @click="requestGeolocation"
+                class="w-full py-2 px-3 rounded-xl border transition-all flex items-center justify-center gap-2 text-xs font-bold active:scale-95 disabled:opacity-50"
+                :class="[
+                  locationDetected
+                    ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-500 dark:text-emerald-400'
+                    : 'bg-tg-bg border-fematch-cyan-200 dark:border-fematch-cyan-900/40 text-fematch-cyan-600 dark:text-fematch-cyan-400 hover:bg-fematch-cyan-500/10'
+                ]"
+              >
+                <Loader2 v-if="isDetectingLocation" class="w-3.5 h-3.5 animate-spin text-fematch-cyan-500" />
+                <Check v-else-if="locationDetected" class="w-3.5 h-3.5 text-emerald-500 stroke-[3]" />
+                <Navigation v-else class="w-3.5 h-3.5 text-fematch-cyan-500" />
+
+                <span>
+                  {{
+                    isDetectingLocation
+                      ? 'Obteniendo coordenadas GPS...'
+                      : locationDetected
+                      ? '📍 Coordenadas GPS actualizadas'
+                      : '📍 Usar mi ubicación actual'
+                  }}
+                </span>
+              </button>
+
+              <div v-if="locationError" class="text-[10px] text-amber-500 text-center font-medium">
+                {{ locationError }}
+              </div>
             </div>
 
             <!-- Identidad de Género (Enum) -->
