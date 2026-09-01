@@ -1,16 +1,27 @@
 import type { TelegramUser } from '@/telegram/types'
 
-export type GenderIdentity = 'FEMBOY' | 'TRANS_FEM' | 'TRANS_MASC' | 'CROSSDRESSER' | 'MAN' | 'OTHER'
+export type GenderIdentity =
+  | 'FEMBOY'
+  | 'TRANS_FEM'
+  | 'TRANS_MASC'
+  | 'CROSSDRESSER'
+  | 'MAN_ACTIVE'
+  | 'MAN_PASSIVE'
+  | 'MAN_VERSATILE'
+  | 'OTHER'
 
 export const GENDER_IDENTITY_LABELS: Record<string, string> = {
   FEMBOY: 'Femboy',
   TRANS_FEM: 'Trans Femenina',
   TRANS_MASC: 'Trans Masculino',
   CROSSDRESSER: 'Crossdresser',
+  MAN_ACTIVE: 'Hombre Activo',
+  MAN_PASSIVE: 'Hombre Pasivo',
+  MAN_VERSATILE: 'Hombre Versátil',
+  OTHER: 'Otro',
   MAN: 'Hombre',
   MALE: 'Hombre',
   HOMBRE: 'Hombre',
-  OTHER: 'Otro',
 }
 
 export const GENDER_IDENTITY_OPTIONS: { value: GenderIdentity; label: string }[] = [
@@ -18,7 +29,9 @@ export const GENDER_IDENTITY_OPTIONS: { value: GenderIdentity; label: string }[]
   { value: 'TRANS_FEM', label: 'Trans Femenina' },
   { value: 'TRANS_MASC', label: 'Trans Masculino' },
   { value: 'CROSSDRESSER', label: 'Crossdresser' },
-  { value: 'MAN', label: 'Hombre' },
+  { value: 'MAN_ACTIVE', label: 'Hombre Activo' },
+  { value: 'MAN_PASSIVE', label: 'Hombre Pasivo' },
+  { value: 'MAN_VERSATILE', label: 'Hombre Versátil' },
   { value: 'OTHER', label: 'Otro' },
 ]
 
