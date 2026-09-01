@@ -224,8 +224,7 @@ async function onPhotoFileSelected(event: Event) {
 
 /**
  * Completa el proceso de Onboarding:
- * SOLO si POST /api/user/onboarding responde exitosamente con un usuario creado en BD,
- * se redirige al feed. Si falla, se muestra error y el usuario permanece en el formulario.
+ * Envía POST /api/user/onboarding y si falla captura el error exacto del servidor.
  */
 async function finishOnboarding() {
   isSubmitting.value = true
@@ -264,11 +263,24 @@ async function finishOnboarding() {
     // 4. SOLO tras confirmación exitosa, redirigir a /discover
     haptics.notification('success')
     router.replace('/discover')
-  } catch (error: any) {
-    console.error('❌ [Onboarding Error]:', error)
+  } catch (err: any) {
+    // Extraer el mensaje exacto devuelto por Express / Prisma / Axios
+    const serverError =
+      err.response?.data?.error ||
+      err.response?.data?.message ||
+      err.message ||
+      'Error de conexión con el servidor'
+
+    console.error('❌ Error detallado de Onboarding:', err.response?.data || err)
     haptics.notification('error')
-    submitErrorMessage.value = 'Error al crear tu perfil. Por favor, intenta de nuevo.'
-    alert('Error al crear tu perfil. Por favor, intenta de nuevo.')
+
+    submitErrorMessage.value = `Fallo al registrar: ${serverError}`
+
+    if (window.Telegram?.WebApp?.showAlert) {
+      window.Telegram.WebApp.showAlert(`Error: ${serverError}`)
+    } else {
+      alert(`Error: ${serverError}`)
+    }
   } finally {
     isSubmitting.value = false
   }
@@ -328,13 +340,13 @@ async function finishOnboarding() {
 
     <!-- Step Content Body (Scrollable) -->
     <main class="flex-1 overflow-y-auto no-scrollbar px-6 py-4 z-10">
-      <!-- Error Banner Global si falla el envío -->
+      <!-- Error Banner Detallado con el mensaje exacto devuelto por Express/Prisma -->
       <div
         v-if="submitErrorMessage"
-        class="mb-4 p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center gap-2.5 text-xs text-rose-500 font-bold animate-shake"
+        class="mb-4 p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-start gap-2.5 text-xs text-rose-600 dark:text-rose-400 font-bold animate-shake shadow-sm"
       >
-        <XCircle class="w-4 h-4 flex-shrink-0" />
-        <span>{{ submitErrorMessage }}</span>
+        <XCircle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <span class="leading-snug break-words">{{ submitErrorMessage }}</span>
       </div>
 
       <!-- ============================================== -->

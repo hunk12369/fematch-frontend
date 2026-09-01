@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useTelegramStore } from '@/stores/telegram.store'
 import { usePremiumStore } from '@/stores/premium.store'
+import { useMatchesStore } from '@/stores/matches.store'
 import { userService } from '@/api/services/user.service'
 import type { User } from '@/api/types'
 import { GENDER_IDENTITY_LABELS } from '@/api/types'
@@ -24,6 +25,7 @@ import {
 
 const tgStore = useTelegramStore()
 const premiumStore = usePremiumStore()
+const matchesStore = useMatchesStore()
 const haptics = useHaptics()
 
 const profile = ref<User | null>(null)
@@ -32,10 +34,31 @@ const isEditModalOpen = ref(false)
 const isUploadingAvatar = ref(false)
 const avatarFileInputRef = ref<HTMLInputElement | null>(null)
 
+// Contadores dinámicos y funcionales
+const displayMatchesCount = computed(() => {
+  if (typeof profile.value?.matchesCount === 'number') {
+    return profile.value.matchesCount
+  }
+  return matchesStore.matches.length
+})
+
+const displayLikesCount = computed(() => {
+  return profile.value?.likesCount ?? 0
+})
+
+const displaySuperlikesCount = computed(() => {
+  return premiumStore.superlikesCount ?? 0
+})
+
 onMounted(async () => {
   try {
-    const res = await userService.getMe()
-    profile.value = res.user
+    const [res] = await Promise.allSettled([
+      userService.getMe(),
+      matchesStore.loadMatches(),
+    ])
+    if (res.status === 'fulfilled' && res.value?.user) {
+      profile.value = res.value.user
+    }
   } finally {
     isLoading.value = false
   }
@@ -75,7 +98,7 @@ async function onAvatarFileSelected(event: Event) {
   haptics.impact('medium')
 
   try {
-    const newPhotoUrl = await userService.uploadPhoto(file, 0)
+    const newPhotoUrl = await userService.uploadPhoto(file, 0, profile.value?.id)
     if (newPhotoUrl && profile.value) {
       profile.value.photos = [
         { id: `photo_${Date.now()}`, url: newPhotoUrl, orderIndex: 0 },
@@ -218,23 +241,23 @@ function testHaptic(style: 'light' | 'medium' | 'heavy') {
         </button>
       </div>
 
-      <!-- Stats Bar (Matches, Likes, Superlikes) -->
+      <!-- Stats Bar (Matches, Likes, Superlikes) Dinámicos y Funcionales -->
       <div class="grid grid-cols-3 gap-2 w-full pt-4 border-t border-fematch-pink-100 dark:border-fematch-violet-900/40">
         <div class="p-2.5 rounded-2xl bg-tg-bg">
           <span class="block text-base font-black text-fematch-pink-500">
-            {{ profile?.matchesCount || 28 }}
+            {{ displayMatchesCount }}
           </span>
           <span class="text-[10px] text-tg-hint font-bold uppercase tracking-wider">Matches</span>
         </div>
         <div class="p-2.5 rounded-2xl bg-tg-bg">
           <span class="block text-base font-black text-fematch-violet-500">
-            {{ profile?.likesCount || 142 }}
+            {{ displayLikesCount }}
           </span>
           <span class="text-[10px] text-tg-hint font-bold uppercase tracking-wider">Likes</span>
         </div>
         <div class="p-2.5 rounded-2xl bg-tg-bg">
           <span class="block text-base font-black text-amber-500">
-            {{ premiumStore.superlikesCount }} ⭐
+            {{ displaySuperlikesCount }} ⭐
           </span>
           <span class="text-[10px] text-tg-hint font-bold uppercase tracking-wider">Superlikes</span>
         </div>

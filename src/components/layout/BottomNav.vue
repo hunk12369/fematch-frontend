@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useMatchesStore } from '@/stores/matches.store'
 import { Flame, MessageCircleHeart, User } from 'lucide-vue-next'
 import { useHaptics } from '@/composables/useHaptics'
 
 const route = useRoute()
 const router = useRouter()
+const matchesStore = useMatchesStore()
 const haptics = useHaptics()
 
-const navItems = [
+const navItems = computed(() => [
   {
     name: 'discover',
     label: 'Descubrir',
@@ -20,7 +22,7 @@ const navItems = [
     label: 'Matches',
     path: '/matches',
     icon: MessageCircleHeart,
-    badge: 2,
+    badge: matchesStore.matches.length > 0 ? matchesStore.matches.length : undefined,
   },
   {
     name: 'profile',
@@ -28,7 +30,7 @@ const navItems = [
     path: '/profile',
     icon: User,
   },
-]
+])
 
 const currentRouteName = computed(() => route.name)
 
@@ -61,7 +63,7 @@ function navigateTo(path: string) {
             :class="{ 'stroke-[2.5px]': currentRouteName === item.name }"
           />
 
-          <!-- Unread Badge -->
+          <!-- Dynamic Unread Badge -->
           <span
             v-if="item.badge"
             class="absolute -top-1 -right-2 px-1.5 py-0.2 text-[10px] font-extrabold bg-gradient-to-r from-fematch-pink-500 to-fematch-violet-500 text-white rounded-full shadow-sm"
