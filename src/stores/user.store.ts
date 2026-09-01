@@ -11,20 +11,30 @@ export const useUserStore = defineStore('user', () => {
   const isLoading = ref<boolean>(false)
 
   /**
-   * Obtiene la información del usuario actual sincronizando con /api/auth/telegram
+   * Obtiene la información del usuario actual sincronizando con /api/auth/telegram y /api/user/me
    */
   async function fetchMe(): Promise<User | null> {
     isLoading.value = true
     try {
       const data = await userService.getMe()
-      profile.value = data.user
-      isNewUser.value = data.isNewUser || data.isProfileIncomplete
-      isProfileIncomplete.value = data.isProfileIncomplete
+      if (data && data.user && data.user.id && !data.isNewUser && !data.isProfileIncomplete) {
+        profile.value = data.user
+        isNewUser.value = false
+        isProfileIncomplete.value = false
+      } else {
+        profile.value = data?.user || null
+        isNewUser.value = true
+        isProfileIncomplete.value = Boolean(data?.isProfileIncomplete)
+      }
       isLoaded.value = true
-      return data.user
+      return profile.value
     } catch (error) {
-      console.error('Error al obtener usuario actual:', error)
-      throw error
+      console.warn('⚠️ [useUserStore.fetchMe] Usuario no encontrado o no autenticado en backend:', error)
+      profile.value = null
+      isNewUser.value = true
+      isProfileIncomplete.value = true
+      isLoaded.value = true
+      return null
     } finally {
       isLoading.value = false
     }
@@ -37,11 +47,19 @@ export const useUserStore = defineStore('user', () => {
     isLoading.value = true
     try {
       const updated = await userService.saveOnboarding(payload)
+      if (!updated || !updated.id) {
+        throw new Error('No se pudo verificar el ID del usuario en la base de datos.')
+      }
       profile.value = updated
       isNewUser.value = false
       isProfileIncomplete.value = false
       isLoaded.value = true
       return updated
+    } catch (error) {
+      profile.value = null
+      isNewUser.value = true
+      isProfileIncomplete.value = true
+      throw error
     } finally {
       isLoading.value = false
     }
@@ -54,6 +72,7 @@ export const useUserStore = defineStore('user', () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('fematch_onboarding_completed')
     }
+    profile.value = null
     isNewUser.value = true
     isProfileIncomplete.value = true
   }

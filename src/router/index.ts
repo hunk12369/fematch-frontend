@@ -68,42 +68,50 @@ const router = createRouter({
 /**
  * Navigation Guard Global:
  * 1. Verifica si existe initData de Telegram válido.
- * 2. Si no hay initData (acceso directo en navegador), App.vue mostrará la modal/pantalla bloqueante.
+ * 2. Si no hay initData (acceso directo en navegador), App.vue mostrará la pantalla bloqueante.
  * 3. Si hay initData:
- *    - Llama al servicio de usuario (GET /api/user/me).
- *    - Si isNewUser === true o el perfil no existe en BD, fuerza la redirección a '/onboarding'
- *      y no permite acceder a '/discover', '/matches', '/profile' ni '/chat'.
- *    - Si isNewUser === false, permite continuar a '/discover' y bloquea '/onboarding'.
+ *    - Antes de permitir la entrada a rutas protegidas ('/discover', '/matches', '/profile', '/chat'):
+ *      * Si no se ha validado el estado en el store, llama a GET /api/user/me.
+ *      * Si el endpoint responde isNewUser: true o no existe user.id en BD, REDIRIGE FORZOSAMENTE a '/onboarding'.
+ *      * Bloquea la navegación al menú hasta que el usuario exista realmente en base de datos.
+ *    - Si ya existe en BD y trata de entrar a '/onboarding', redirige a '/discover'.
  */
 router.beforeEach(async (to, _from, next) => {
-  // 1. Si no hay initData de Telegram, permitir la navegación para que App.vue muestre la pantalla de bienvenida/bloqueo de Telegram
+  // 1. Si no hay initData de Telegram, permitir la navegación para que App.vue muestre la pantalla bloqueante
   if (!hasValidTelegramInitData()) {
     return next()
   }
 
   const userStore = useUserStore()
 
-  // 2. Si aún no se ha cargado el usuario, consultar al backend
+  // 2. Si aún no se ha cargado el usuario, consultar al backend vía fetchMe() (GET /api/user/me)
   if (!userStore.isLoaded) {
     try {
       await userStore.fetchMe()
     } catch (error) {
-      console.warn('⚠️ [Router Guard] Error al obtener datos de usuario:', error)
+      console.warn('⚠️ [Router Guard] Error al consultar usuario en backend:', error)
     }
   }
 
-  const needsOnboarding = userStore.isNewUser || userStore.isProfileIncomplete || !userStore.profile
+  // 3. Comprobar si el usuario existe fehacientemente en la base de datos con ID válido
+  const hasRegisteredProfileInDb = Boolean(
+    userStore.isLoaded &&
+    !userStore.isNewUser &&
+    !userStore.isProfileIncomplete &&
+    userStore.profile &&
+    userStore.profile.id
+  )
 
-  // 3. Si es nuevo usuario o perfil incompleto, forzar /onboarding
-  if (needsOnboarding) {
+  // 4. Si NO existe en BD o es nuevo usuario: REDIRIGIR FORZOSAMENTE a /onboarding
+  if (!hasRegisteredProfileInDb) {
     if (to.name !== 'onboarding') {
       return next({ name: 'onboarding' })
     }
     return next()
   }
 
-  // 4. Si ya completó el onboarding y trata de entrar a /onboarding, enviar a /discover
-  if (!needsOnboarding && to.name === 'onboarding') {
+  // 5. Si YA existe en BD e intenta acceder a /onboarding, redirigir a /discover
+  if (hasRegisteredProfileInDb && to.name === 'onboarding') {
     return next({ name: 'discover' })
   }
 

@@ -24,6 +24,7 @@ import {
   Compass,
   Calendar,
   Navigation,
+  XCircle,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -40,7 +41,9 @@ const isDetectingLocation = ref(false)
 const locationDetected = ref(false)
 const locationError = ref<string | null>(null)
 const uploadErrorMessage = ref<string | null>(null)
+const submitErrorMessage = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const selectedPhotoFile = ref<File | null>(null)
 
 // Formulario reactivo de Onboarding alineado con el contrato del backend
 const form = reactive({
@@ -105,6 +108,7 @@ function nextStep() {
   if (!isStepValid.value) return
 
   haptics.impact('light')
+  submitErrorMessage.value = null
   if (currentStep.value < totalSteps) {
     currentStep.value++
   } else {
@@ -115,6 +119,7 @@ function nextStep() {
 function prevStep() {
   if (currentStep.value > 1) {
     haptics.selection()
+    submitErrorMessage.value = null
     currentStep.value--
   }
 }
@@ -182,7 +187,7 @@ async function onPhotoFileSelected(event: Event) {
   const file = target.files?.[0]
   if (!file) return
 
-  // Validación de tamaño en cliente (< 5MB)
+  // 1. Validación de tamaño en cliente (< 5MB)
   const MAX_SIZE_BYTES = 5 * 1024 * 1024
   if (file.size > MAX_SIZE_BYTES) {
     const sizeInMb = (file.size / (1024 * 1024)).toFixed(1)
@@ -192,32 +197,44 @@ async function onPhotoFileSelected(event: Event) {
     return
   }
 
-  isUploadingPhoto.value = true
   uploadErrorMessage.value = null
-  haptics.impact('medium')
+  selectedPhotoFile.value = file
 
-  try {
-    const newPhotoUrl = await userService.uploadPhoto(file, 0)
-    if (newPhotoUrl) {
-      form.photos = [newPhotoUrl, ...form.photos.filter((p) => p !== newPhotoUrl)]
-      haptics.notification('success')
+  // 2. Generar preview local inmediata
+  const localPreviewUrl = URL.createObjectURL(file)
+  form.photos = [localPreviewUrl, ...form.photos.filter((p) => p !== localPreviewUrl)]
+  haptics.notification('success')
+
+  // 3. Si el usuario ya existe en BD, subir inmediatamente
+  if (userStore.profile?.id) {
+    isUploadingPhoto.value = true
+    try {
+      const serverUrl = await userService.uploadPhoto(file, 0, userStore.profile.id)
+      if (serverUrl) {
+        form.photos = [serverUrl, ...form.photos.filter((p) => p !== serverUrl && p !== localPreviewUrl)]
+      }
+    } catch (err: any) {
+      console.warn('Advertencia al subir foto inmediatamente:', err)
+    } finally {
+      isUploadingPhoto.value = false
+      target.value = ''
     }
-  } catch (err: any) {
-    uploadErrorMessage.value = err.message || 'Error al subir la imagen'
-    haptics.notification('error')
-  } finally {
-    isUploadingPhoto.value = false
-    target.value = ''
   }
 }
 
+/**
+ * Completa el proceso de Onboarding:
+ * SOLO si POST /api/user/onboarding responde exitosamente con un usuario creado en BD,
+ * se redirige al feed. Si falla, se muestra error y el usuario permanece en el formulario.
+ */
 async function finishOnboarding() {
   isSubmitting.value = true
+  submitErrorMessage.value = null
   haptics.impact('medium')
 
   try {
-    // Guardar datos mediante POST /api/user/onboarding
-    await userStore.completeOnboarding({
+    // 1. Enviar petición POST /api/user/onboarding al backend
+    const createdUser = await userStore.completeOnboarding({
       gender_identity: form.gender_identity,
       birth_date: form.birth_date,
       bio: form.bio.trim(),
@@ -230,12 +247,28 @@ async function finishOnboarding() {
       max_distance_km: Number(form.max_distance_km),
     })
 
+    // 2. Validar que el usuario fue creado satisfactoriamente en BD
+    if (!createdUser || !createdUser.id) {
+      throw new Error('No se recibió la confirmación de creación de cuenta en la base de datos.')
+    }
+
+    // 3. Subir foto pendiente si existe archivo local y la cuenta ya fue creada
+    if (selectedPhotoFile.value && createdUser.id) {
+      try {
+        await userService.uploadPhoto(selectedPhotoFile.value, 0, createdUser.id)
+      } catch (photoUploadError) {
+        console.warn('⚠️ [Onboarding] Foto guardada como preview, reintento en perfil:', photoUploadError)
+      }
+    }
+
+    // 4. SOLO tras confirmación exitosa, redirigir a /discover
     haptics.notification('success')
     router.replace('/discover')
-  } catch (error) {
-    console.error('Error al completar onboarding:', error)
+  } catch (error: any) {
+    console.error('❌ [Onboarding Error]:', error)
     haptics.notification('error')
-    alert('Ocurrió un error al guardar tus datos. Inténtalo de nuevo.')
+    submitErrorMessage.value = 'Error al crear tu perfil. Por favor, intenta de nuevo.'
+    alert('Error al crear tu perfil. Por favor, intenta de nuevo.')
   } finally {
     isSubmitting.value = false
   }
@@ -295,6 +328,15 @@ async function finishOnboarding() {
 
     <!-- Step Content Body (Scrollable) -->
     <main class="flex-1 overflow-y-auto no-scrollbar px-6 py-4 z-10">
+      <!-- Error Banner Global si falla el envío -->
+      <div
+        v-if="submitErrorMessage"
+        class="mb-4 p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center gap-2.5 text-xs text-rose-500 font-bold animate-shake"
+      >
+        <XCircle class="w-4 h-4 flex-shrink-0" />
+        <span>{{ submitErrorMessage }}</span>
+      </div>
+
       <!-- ============================================== -->
       <!-- PASO 1: ¿CÓMO TE IDENTIFICAS?                  -->
       <!-- ============================================== -->
@@ -570,7 +612,7 @@ async function finishOnboarding() {
               class="px-4 py-2 rounded-2xl bg-tg-secondary-bg border border-fematch-pink-200 dark:border-fematch-violet-800 text-xs font-bold text-fematch-pink-600 dark:text-fematch-pink-400 flex items-center gap-1.5 active:scale-95 transition-transform"
             >
               <UploadCloud class="w-4 h-4" />
-              <span>Subir Foto (&lt; 5MB)</span>
+              <span>Seleccionar Foto (&lt; 5MB)</span>
             </button>
           </div>
 

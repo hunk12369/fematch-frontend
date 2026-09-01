@@ -2,7 +2,7 @@ import { http, apiClient } from '../client'
 import { authService } from './auth.service'
 import type { ApiResponse, User, UserPhoto, OnboardingPayload } from '../types'
 
-// Estado en memoria simulado para desarrollo
+// Estado en memoria del usuario autenticado
 let localCachedUser: User | null = null
 
 export const userService = {
@@ -13,33 +13,35 @@ export const userService = {
   getMe: async (): Promise<{ user: User | null; isNewUser: boolean; isProfileIncomplete: boolean }> => {
     try {
       // 1. Intentar obtener perfil desde GET /api/user/me
-      const response = await http.get<ApiResponse<{ user: User; isNewUser?: boolean; isProfileIncomplete?: boolean }> & { user?: User; isNewUser?: boolean; isProfileIncomplete?: boolean }>('/api/user/me')
+      const response = await http.get<any>('/api/user/me')
       
-      const userData = response.data?.user || response.user || (response.data as unknown as User)
-      if (userData && userData.id) {
+      const userData = response.data?.user || response.user || (response.data?.id ? response.data : null)
+      const isNew = Boolean(response.isNewUser ?? response.data?.isNewUser ?? !userData?.id)
+      const isIncomplete = Boolean(response.isProfileIncomplete ?? response.data?.isProfileIncomplete ?? (!userData?.birthDate || !userData?.genderIdentity))
+
+      if (userData && userData.id && !isNew && !isIncomplete) {
         localCachedUser = userData
-        const isNew = Boolean(response.data?.isNewUser ?? response.isNewUser ?? false)
-        const isIncomplete = Boolean(response.data?.isProfileIncomplete ?? response.isProfileIncomplete ?? (!userData.birthDate || !userData.genderIdentity))
         return {
           user: localCachedUser,
-          isNewUser: isNew || isIncomplete,
-          isProfileIncomplete: isIncomplete,
+          isNewUser: false,
+          isProfileIncomplete: false,
         }
       }
 
       // 2. Si no hay user en /api/user/me, sincronizar vía POST /api/auth/telegram
       const authData = await authService.syncTelegram()
-      if (authData.data?.user) {
+      if (authData.data?.user && authData.data.user.id && !authData.isNewUser && !authData.isProfileIncomplete) {
         localCachedUser = authData.data.user
         return {
           user: localCachedUser,
-          isNewUser: Boolean(authData.isNewUser || authData.isProfileIncomplete),
-          isProfileIncomplete: Boolean(authData.isProfileIncomplete),
+          isNewUser: false,
+          isProfileIncomplete: false,
         }
       }
 
+      localCachedUser = null
       return {
-        user: localCachedUser,
+        user: null,
         isNewUser: true,
         isProfileIncomplete: true,
       }
@@ -47,18 +49,19 @@ export const userService = {
       // Fallback a sincronización de Telegram
       try {
         const authData = await authService.syncTelegram()
-        if (authData.data?.user) {
+        if (authData.data?.user && authData.data.user.id && !authData.isNewUser && !authData.isProfileIncomplete) {
           localCachedUser = authData.data.user
           return {
             user: localCachedUser,
-            isNewUser: Boolean(authData.isNewUser || authData.isProfileIncomplete),
-            isProfileIncomplete: Boolean(authData.isProfileIncomplete),
+            isNewUser: false,
+            isProfileIncomplete: false,
           }
         }
       } catch {}
 
+      localCachedUser = null
       return {
-        user: localCachedUser,
+        user: null,
         isNewUser: true,
         isProfileIncomplete: true,
       }
@@ -68,53 +71,23 @@ export const userService = {
   /**
    * Completa el onboarding y guarda los datos de perfil en el backend
    * POST /api/user/onboarding
-   * Payload: { gender_identity, birth_date, bio, city, target_genders, min_age, max_age, max_distance_km }
+   * Payload: { gender_identity, birth_date, bio, city, latitude, longitude, target_genders, min_age, max_age, max_distance_km }
    */
   saveOnboarding: async (payload: OnboardingPayload): Promise<User> => {
-    try {
-      const response = await http.post<ApiResponse<User> & { user?: User }>('/api/user/onboarding', payload)
-      const user = response.data || response.user || (localCachedUser as User)
-      localCachedUser = user
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('fematch_onboarding_completed', 'true')
-      }
-      return user
-    } catch (error) {
-      console.warn('⚠️ [saveOnboarding] Error al guardar onboarding:', error)
-      let calculatedAge = 22
-      if (payload.birth_date) {
-        const birth = new Date(payload.birth_date)
-        const today = new Date()
-        calculatedAge = today.getFullYear() - birth.getFullYear()
-      }
+    const response = await http.post<any>('/api/user/onboarding', payload)
 
-      const fallbackUser: User = {
-        id: localCachedUser?.id || `usr_${Date.now()}`,
-        telegramId: localCachedUser?.telegramId || '987654321',
-        firstName: localCachedUser?.firstName || 'Usuario',
-        username: localCachedUser?.username || '',
-        birthDate: payload.birth_date,
-        age: calculatedAge,
-        genderIdentity: payload.gender_identity,
-        bio: payload.bio || '',
-        city: payload.city || '',
-        latitude: payload.latitude ?? null,
-        longitude: payload.longitude ?? null,
-        isVip: localCachedUser?.isVip || false,
-        photos: localCachedUser?.photos || [],
-        preference: {
-          targetGenders: payload.target_genders,
-          minAge: payload.min_age,
-          maxAge: payload.max_age,
-          maxDistanceKm: payload.max_distance_km,
-        },
-      }
-      localCachedUser = fallbackUser
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('fematch_onboarding_completed', 'true')
-      }
-      return fallbackUser
+    // Validar respuesta del servidor
+    if (!response || response.success === false) {
+      throw new Error(response?.message || response?.error || 'Error al guardar perfil en el backend')
     }
+
+    const userData = response.data?.user || response.data || response.user
+    if (!userData || !userData.id) {
+      throw new Error('El backend no devolvió el registro del usuario creado con ID válido.')
+    }
+
+    localCachedUser = userData
+    return userData
   },
 
   /**
@@ -145,49 +118,42 @@ export const userService = {
   /**
    * Sube una foto a Cloudflare R2 y la asocia en la base de datos
    * POST /api/user/photos (Multipart, máx 5MB)
+   * Solo se ejecuta si el usuario ya existe en base de datos (con user.id)
    */
-  uploadPhoto: async (file: File, orderIndex?: number): Promise<string> => {
+  uploadPhoto: async (file: File, orderIndex?: number, userId?: string): Promise<string> => {
+    const currentUserId = userId || localCachedUser?.id
+    if (!currentUserId) {
+      console.warn('⚠️ [uploadPhoto] Intento de subida sin usuario creado en BD. Cancelando petición.')
+      throw new Error('Debes completar tu perfil antes de subir fotos al servidor.')
+    }
+
     const formData = new FormData()
     formData.append('photo', file)
     if (typeof orderIndex === 'number') {
       formData.append('orderIndex', String(orderIndex))
     }
 
-    try {
-      const response = await apiClient.post<ApiResponse<{ photo: UserPhoto }>>(
-        '/api/user/photos',
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      )
-
-      const photo = response.data?.data?.photo
-      const photoUrl = photo?.url
-
-      if (photoUrl) {
-        if (localCachedUser && !localCachedUser.photos.some((p) => p.url === photoUrl)) {
-          localCachedUser.photos.push(photo)
-        }
-        return photoUrl
+    const response = await apiClient.post<ApiResponse<{ photo: UserPhoto }>>(
+      '/api/user/photos',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       }
+    )
 
-      throw new Error('Respuesta inválida del servidor al subir la foto')
-    } catch (error) {
-      console.warn('⚠️ [uploadPhoto] Fallback para imagen local:', error)
-      const localUrl = URL.createObjectURL(file)
-      if (localCachedUser) {
-        const newPhoto: UserPhoto = {
-          id: `photo_${Date.now()}`,
-          url: localUrl,
-          orderIndex: localCachedUser.photos.length,
-        }
-        localCachedUser.photos.push(newPhoto)
+    const photo = response.data?.data?.photo
+    const photoUrl = photo?.url
+
+    if (photoUrl) {
+      if (localCachedUser && !localCachedUser.photos.some((p) => p.url === photoUrl)) {
+        localCachedUser.photos.push(photo)
       }
-      return localUrl
+      return photoUrl
     }
+
+    throw new Error('Respuesta inválida del servidor al subir la foto')
   },
 
   /**
@@ -202,11 +168,11 @@ export const userService = {
       }
       return true
     } catch (error) {
-      console.warn(`⚠️ [deletePhoto] Fallback al eliminar foto ${photoId}:`, error)
+      console.warn(`⚠️ [deletePhoto] Error al eliminar foto ${photoId}:`, error)
       if (localCachedUser) {
         localCachedUser.photos = localCachedUser.photos.filter((p) => p.id !== photoId)
       }
-      return true
+      return false
     }
   },
 }
