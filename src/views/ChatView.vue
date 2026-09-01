@@ -18,7 +18,7 @@ const isLoading = ref(true)
 onMounted(async () => {
   try {
     const matches = await matchService.getMatches()
-    match.value = matches.find((m) => m.id === matchId) || matches[0] || null
+    match.value = matches.find((m) => m.id === matchId || (m as any).matchId === matchId) || matches[0] || null
   } finally {
     isLoading.value = false
   }

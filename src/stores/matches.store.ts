@@ -66,9 +66,11 @@ export const useMatchesStore = defineStore('matches', () => {
       const result = await matchService.interact(currentCandidate.id, action)
 
       if (result.isMatch) {
-        lastMatch.value = currentCandidate
+        lastMatch.value = result.matchedUser || currentCandidate
         isMatchModalOpen.value = true
         haptics.notification('success')
+        // Sincronizar inmediatamente la lista de conexiones activas
+        loadMatches().catch((err) => console.warn('Error al refrescar matches tras swipe:', err))
       }
 
       // Avanzar al siguiente perfil

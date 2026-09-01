@@ -87,17 +87,38 @@ export const matchService = {
   swipe: async (targetUserId: string, type: SwipeType): Promise<SwipeResponse> => {
     try {
       const payload: SwipePayload = { targetUserId, type }
-      const response = await http.post<ApiResponse<SwipeResponse> & SwipeResponse>('/api/swipe', payload)
+      const response = await http.post<any>('/api/swipe', payload)
 
-      if (typeof response.match === 'boolean') {
-        return response
+      const isMatch = Boolean(response?.match || response?.data?.match)
+      const matchId = response?.matchId || response?.data?.matchId
+      const rawUser = response?.matchedUser || response?.data?.matchedUser
+
+      let matchedUser: User | undefined = undefined
+      if (rawUser) {
+        matchedUser = {
+          id: rawUser.id || targetUserId,
+          telegramId: String(rawUser.telegramId || ''),
+          firstName: rawUser.firstName || rawUser.name || 'Match',
+          username: rawUser.username || '',
+          birthDate: rawUser.birthDate || '',
+          age: Number(rawUser.age) || 24,
+          genderIdentity: rawUser.genderIdentity || rawUser.gender_identity || 'OTHER',
+          bio: rawUser.bio || '',
+          city: rawUser.city || '',
+          isVip: Boolean(rawUser.isVip),
+          photos: Array.isArray(rawUser.photos) && rawUser.photos.length > 0
+            ? rawUser.photos
+            : rawUser.photoUrl
+            ? [{ id: 'photo_0', url: rawUser.photoUrl, orderIndex: 0 }]
+            : [],
+        }
       }
-      if (response.data && typeof response.data.match === 'boolean') {
-        return response.data
-      }
+
       return {
         success: true,
-        match: false,
+        match: isMatch,
+        matchId,
+        matchedUser,
       }
     } catch (error) {
       console.warn('⚠️ [matchService.swipe] Error al registrar swipe:', error)
@@ -119,7 +140,7 @@ export const matchService = {
     }
     const result = await matchService.swipe(candidateId, typeMap[action])
     return {
-      isMatch: result.match,
+      isMatch: Boolean(result.match),
       matchId: result.matchId || (result.match ? `match_${candidateId}` : undefined),
       matchedUser: result.matchedUser,
     }
@@ -131,30 +152,49 @@ export const matchService = {
    */
   getMatches: async (): Promise<User[]> => {
     try {
-      const response = await http.get<ApiResponse<User[]> & User[]>('/api/matches')
-      const rawMatches = Array.isArray(response?.data)
-        ? response.data
-        : Array.isArray(response)
-        ? response
-        : []
+      const response = await http.get<any>('/api/matches')
+      let rawMatchesList: any[] = []
 
-      return rawMatches.map((m: any) => ({
-        id: m.id,
-        telegramId: String(m.telegramId || ''),
-        firstName: m.firstName || m.name || 'Match',
-        username: m.username || '',
-        birthDate: m.birthDate || '',
-        age: Number(m.age) || 22,
-        genderIdentity: m.genderIdentity || m.gender_identity || 'OTHER',
-        bio: m.bio || '',
-        city: m.city || '',
-        isVip: Boolean(m.isVip),
-        photos: Array.isArray(m.photos)
-          ? m.photos.map((ph: any, idx: number) =>
-              typeof ph === 'string' ? { id: `photo_${idx}`, url: ph, orderIndex: idx } : ph
+      if (response?.data?.matches && Array.isArray(response.data.matches)) {
+        rawMatchesList = response.data.matches
+      } else if (response?.matches && Array.isArray(response.matches)) {
+        rawMatchesList = response.matches
+      } else if (Array.isArray(response?.data)) {
+        rawMatchesList = response.data
+      } else if (Array.isArray(response)) {
+        rawMatchesList = response
+      }
+
+      return rawMatchesList.map((item: any) => {
+        const u = item.user || item
+        const matchId = item.matchId || u.id
+
+        const photosList = Array.isArray(u.photos) && u.photos.length > 0
+          ? u.photos.map((ph: any, idx: number) =>
+              typeof ph === 'string'
+                ? { id: `photo_${idx}`, url: ph, orderIndex: idx }
+                : { id: ph.id || `photo_${idx}`, url: ph.url || '', orderIndex: ph.orderIndex ?? idx }
             )
-          : [],
-      }))
+          : u.photoUrl
+          ? [{ id: 'photo_0', url: u.photoUrl, orderIndex: 0 }]
+          : []
+
+        return {
+          id: u.id || matchId,
+          matchId,
+          telegramId: String(u.telegramId || ''),
+          firstName: u.firstName || u.name || 'Match',
+          username: u.username || '',
+          birthDate: u.birthDate || '',
+          age: Number(u.age) || 24,
+          genderIdentity: u.genderIdentity || u.gender_identity || 'OTHER',
+          bio: u.bio || '',
+          city: u.city || '',
+          isVip: Boolean(u.isVip),
+          photos: photosList,
+          online: true,
+        }
+      })
     } catch (error) {
       console.warn('⚠️ [matchService.getMatches] Error al obtener matches:', error)
       return []
